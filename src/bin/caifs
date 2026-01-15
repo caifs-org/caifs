@@ -1,0 +1,328 @@
+#!/bin/sh
+
+BINDIR=$(dirname $0)
+. ${BINDIR}/../lib/utils.sh
+
+##
+## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
+# By default, run both links and hooks
+VERSION=1.0.0
+RUN_LINKS=${CAIFS_RUN_LINKS:-0}
+RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
+
+# Force the override of existing link targets
+RUN_FORCE=${CAIFS_RUN_FORCE:-1}
+
+# Multiple targets could be specified. We will run them in order
+RUN_TARGETS=""
+VERBOSE=${CAIFS_VERBOSE:=1}
+
+# A list of directories to interogate for caifs libs
+CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
+CONFIG_DIR=config
+HOOKS_DIR=hooks
+
+# The root directory of where config should link to. By default it should be home, but for root scenarios
+# this can be overridden
+LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
+
+# Source the OS type
+OS_TYPE=$(uname -s)
+OS_ID=""
+OS_VERSION_ID=""
+OS_ARCH=$(uname -m)
+
+if [ ${OS_TYPE} = "Linux" ]; then
+    . /etc/os-release
+    OS_ID=${ID}
+    OS_VERSION_ID=${VERSION_ID}
+
+elif [ ${OS_TYPE} = "Darwin" ]; then
+    OS_ID=$(sw_vers -productName)
+    OS_VERSION_ID=$(sw_vers -productVersion)
+else
+    log_error "Unsupported Operating System - $OS_TYPE"
+fi
+
+
+print_help() {
+    echo "Help"
+}
+
+main() {
+    log_debug "Parsing Arguments $@"
+    SUBCOMMAND=$1
+    shift # Remove subcommand name from the argument list
+
+    if [ "$SUBCOMMAND" = "--verbose" ]; then
+        #log_debug "Verbose flag set"
+        VERBOSE=0;
+        SUBCOMMAND=$1
+        shift
+    fi
+    if [ "$SUBCOMMAND" = "--help" ]; then
+        print_help
+        exit 0
+    fi
+    if [ "$SUBCOMMAND" = "--version" ]; then
+        echo "$VERSION"
+        exit 0
+    fi
+
+    case "$SUBCOMMAND" in
+        run)
+            # Parse 'run' specific options
+            SUB_TEMP=$(getopt -o flhd: -l force,links,hooks,directory: -n "run" -- "$@")
+            if [ $? -ne 0 ]; then exit 1; fi
+            eval set -- "$SUB_TEMP"
+
+            ARG_CAIFS_COLLECTIONS=""
+            while true; do
+                case "$1" in
+                    -l|--links) RUN_HOOKS=1; shift ;;
+                    -h|--hooks) RUN_LINKS=1; shift ;;
+                    # If directory is specified, override any collection paths and just work with this directory
+                    -d|--directory)
+                        if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
+                            ARG_CAIFS_COLLECTIONS="${ARG_CAIFS_COLLECTIONS}:$(realpath $2)"
+                        else
+                            ARG_CAIFS_COLLECTIONS=$(realpath "$2")
+                        fi
+                        shift 2
+                        ;;
+                    -f|--force) RUN_FORCE=0; shift ;;
+                    --) shift; break ;;
+                    *) break ;;
+                esac
+            done
+
+            # All directories have been parsed, so override any pre-set CAIFS_COLLECTIONS entries
+            if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
+                CAIFS_COLLECTIONS=$ARG_CAIFS_COLLECTIONS
+            fi
+            RUN_TARGETS=$@
+
+            log_debug $RUN_TARGETS
+            if [ -z "$RUN_TARGETS" ]; then
+                echo "At least one target is required!"
+                exit 1
+            fi
+
+            log_debug "$SUBCOMMAND RUN_TARGETS=$RUN_TARGETS | VERBOSE=$VERBOSE RUN_LINKS=$RUN_LINKS RUN_HOOKS=$RUN_HOOKS ROOT_DIRECTORY CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS"
+            cmd_run
+            ;;
+        rm)
+            SUB_TEMP=$(getopt -o lhd: -l links,hooks,directory: -n "rm" -- "$@")
+            if [ $? -ne 0 ]; then exit 1; fi
+            eval set -- "$SUB_TEMP"
+
+            ARG_CAIFS_COLLECTIONS=""
+            while true; do
+                case "$1" in
+                    -d|--directory)
+                        if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
+                            ARG_CAIFS_COLLECTIONS="${ARG_CAIFS_COLLECTIONS}:$(realpath $2)"
+                        else
+                            ARG_CAIFS_COLLECTIONS=$(realpath "$2")
+                        fi
+                        shift 2
+                        ;;
+                    -l|--links) RUN_HOOKS=1; shift ;;
+                    -h|--hooks) RUN_LINKS=1; shift ;;
+                    --) shift; break ;;
+                    *) break ;;
+                esac
+            done
+
+            # All directories have been parsed, so override any pre-set CAIFS_COLLECTIONS entries
+            if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
+                CAIFS_COLLECTIONS=$ARG_CAIFS_COLLECTIONS
+            fi
+            RUN_TARGETS="$*"
+
+            log_debug "$SUBCOMMAND CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS RUN_TARGETS=$RUN_TARGETS"
+            cmd_remove
+            ;;
+        "")
+            echo "No subcommand provided."
+            exit 1
+            ;;
+        *)
+            echo "Unknown subcommand: $SUBCOMMAND"
+            exit 1
+            ;;
+    esac
+}
+
+# Creates symbolic links for all files under the target config directory
+# It creates the directory structure, if it doesn't exist already
+# $1: collection path
+# $2: target
+create_target_links() {
+    collection_path="$1"
+    target=$2
+    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
+    log_debug "Creating link for $@"
+
+    for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
+        log_debug "creating link to $target_directory/$relative_file -> $LINK_ROOT/$relative_file"
+
+        if [ -e $LINK_ROOT/$relative_file ] && [ "$RUN_FORCE" -ne 0 ]; then
+            log_warn "link or file already exists for $LINK_ROOT/$relative_file .... skipping"
+            continue
+        elif [ -e $LINK_ROOT/$relative_file ] && [ "$RUN_FORCE" -eq 0 ]; then
+            if [ -L $LINK_ROOT/$relative_file ]; then
+                log_warn "FORCE set, unlinking $LINK_ROOT/$relative_file"
+                unlink $LINK_ROOT/$relative_file
+            elif [ -f $LINK_ROOT/$relative_file ]; then
+                log_warn "FORCE set, removing regular file $LINK_ROOT/$relative_file"
+                rm $LINK_ROOT/$relative_file
+            fi
+        fi
+
+        basedir="$(dirname $LINK_ROOT/$relative_file)"
+        if [ ! -d "$basedir" ]; then
+            log_debug "Creating directory structure at $basedir"
+            mkdir -p "$basedir"
+        fi
+        ln -s $target_directory/$relative_file $LINK_ROOT/$relative_file
+    done
+}
+
+# Removes all symbolic links for all files under the target config directory
+# $1: collection path
+# $2: target
+remove_target_links() {
+    collection_path="$1"
+    target=$2
+    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
+    log_debug "Removing links for target=$target in collection=$collection_path"
+
+    for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
+        log_debug "Found ${relative_file}. Checking if link exists at $LINK_ROOT/$relative_file"
+        if [ -L $LINK_ROOT/$relative_file ]; then
+            log_info "Removing link from $LINK_ROOT/$relative_file -> $target_directory/$relative_file"
+            unlink $LINK_ROOT/$relative_file
+        fi
+    done
+}
+
+# Run a specific type of hook for a given target.
+# Sandbox the hook script by copying the script and injecting the utilities module in
+# This will give access to all the OS variables and utiltities
+# $1: collection path
+# $2: target
+# $3: hook type [pre|post|rm]
+run_hook() {
+    collection_path="$1"
+    target=$2
+    hook_type=$3
+    log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+
+    if [ -f $collection_path/$target/$HOOKS_DIR/${hook_type}.sh ]; then
+        TMP_DIR=$(mktemp -d)
+        cd ${TMP_DIR}
+
+        # import the hook script functions
+        . $collection_path/$target/$HOOKS_DIR/${hook_type}.sh
+
+        run_hook_functions
+
+        cd -
+        rm -rf ${TMP_DIR}
+    else
+        log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
+    fi
+}
+
+# $1: collection path
+# $2: The target name to run the hook for
+run_remove_hook() {
+    run_hook $@ "rm"
+}
+
+# $1: collection path
+# $2: The target name to run the hook for
+run_pre_hook() {
+    run_hook $@ "pre"
+}
+
+# $1: collection path
+# $2: The target name to run the hook for
+run_post_hook() {
+    run_hook $@ "post"
+}
+
+
+# command handler for running the remove action
+# $1: target to action
+cmd_remove() {
+    log_debug "Removing $RUN_TARGETS from '$CAIFS_COLLECTIONS'"
+    collection_paths="$CAIFS_COLLECTIONS"
+
+    while [ -n "$collection_paths" ]; do
+        caifs_collection="${collection_paths%%:*}"
+
+        log_debug "Working with $caifs_collection"
+
+        for target in $RUN_TARGETS; do
+            log_debug "$target"
+
+            if [ "$RUN_LINKS" -eq 0 ]; then
+                remove_target_links ${caifs_collection} ${target}
+            fi
+
+            if [ "$RUN_HOOKS" -eq 0 ]; then
+                run_remove_hook ${caifs_collection} "$target"
+            fi
+        done
+            # Loop control, get the next path to operate on
+        if [ "$caifs_collection" = "$collection_paths" ]; then
+            # No more paths available. End the loop
+            collection_paths=""
+        else
+            collection_paths="${collection_paths#*${caifs_collection}:}"
+        fi
+    done
+}
+
+# Loop over the CAIFS_COLLECTIONS variable, which is colon (:) separated paths to caifs collections
+# First target wins, so order in the collection is important.
+cmd_run() {
+    log_debug "Starting run with collection_paths '$CAIFS_COLLECTIONS'"
+
+    collection_paths="$CAIFS_COLLECTIONS"
+
+    while [ -n "$collection_paths" ]; do
+
+        caifs_collection="${collection_paths%%:*}"
+
+        log_debug "Working with $caifs_collection"
+
+        for target in $RUN_TARGETS; do
+            log_debug "$target"
+
+            if [ "$RUN_HOOKS" -eq 0 ]; then
+                run_pre_hook "${caifs_collection}" "$target"
+            fi
+
+            if [ "$RUN_LINKS" -eq 0 ]; then
+                create_target_links ${caifs_collection} ${target}
+            fi
+
+            if [ "$RUN_HOOKS" -eq 0 ]; then
+                run_post_hook "${caifs_collection}" "$target"
+            fi
+        done
+
+        # Loop control, get the next path to operate on
+        if [ "$caifs_collection" = "$collection_paths" ]; then
+            # No more paths available. End the loop
+            collection_paths=""
+        else
+            collection_paths="${collection_paths#*${caifs_collection}:}"
+        fi
+    done
+}
+
+main "$@"
