@@ -111,4 +111,21 @@ test_3() {
     assert "! -L $CAIFS_LINK_ROOT/.gitconfig" ".gitconfig should not be linked to root dir"
 }
 
+# Test removing of a links
+test_4() {
+    caifs run git -d dummy_0 --links
+    assert "-L $CAIFS_LINK_ROOT/.gitconfig" ".gitconfig should be linked to root dir"
+
+    caifs rm git -d dummy_0 --links
+    assert "! -L $CAIFS_LINK_ROOT/.gitconfig" ".gitconfig should not be linked to root dir"
+}
+
+# Test multiple collections
+test_5() {
+    touch dummy_1/git/config/.gitconfig-private
+
+    caifs run git -d dummy_0 -d dummy_1 --links
+    assert "-f $CAIFS_LINK_ROOT/.gitconfig-private" "Private gitconfig should exist from the dummy_0 root"
+}
+
 main

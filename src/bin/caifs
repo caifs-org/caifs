@@ -165,7 +165,7 @@ create_target_links() {
     log_debug "Creating link for $@"
 
     for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
-        log_debug "creating link to $target_directory/$relative_file -> $LINK_ROOT/$relative_file"
+        log_debug "attempting to create link to $target_directory/$relative_file -> $LINK_ROOT/$relative_file"
 
         if [ -e $LINK_ROOT/$relative_file ] && [ "$RUN_FORCE" -ne 0 ]; then
             log_warn "link or file already exists for $LINK_ROOT/$relative_file .... skipping"
@@ -185,6 +185,7 @@ create_target_links() {
             log_debug "Creating directory structure at $basedir"
             mkdir -p "$basedir"
         fi
+        log_info "Creating Link $target_directory/$relative_file -> $LINK_ROOT/$relative_file"
         ln -s $target_directory/$relative_file $LINK_ROOT/$relative_file
     done
 }
