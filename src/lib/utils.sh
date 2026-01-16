@@ -18,10 +18,96 @@ log_warn() {
 # $2: The exit code [Default 1]
 log_error() {
     rc=${2:-1}
-    echo "ERROR: $@"
+    echo "ERROR: $1"
     exit $rc
 }
 
+# Runs a command, if the DRY_RUN setting is not in effect
+dry_or_exec() {
+    if [ "$DRY_RUN" -ne 0 ]; then
+        log_debug "COMMAND is $@"
+        $@
+    else
+        log_info "DRY-RUN: Would have run $@"
+    fi
+}
+
+# validate that a supplied path actually resembles a path
+# $1: The path to check
+validate_path() {
+    rc=$(pathchk "$1")
+    log_debug "pathchk rc=$rc"
+    if [ "$rc" -ne 0 ]; then
+        log_error "$1 does not appear to be a valid path"
+    fi
+}
+
+# Replaces delimited variables in a given string, with the values of the string if they exist
+# $1: The string with delimited variables
+# $2: delimiter [default: %]
+replace_vars_in_string() {
+    path="$1"
+    remaining="$string"
+
+    for s in $(echo $path | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
+        match_value=$(eval "echo \$${s}")
+        if [ -z "$match_value" ]; then
+            log_error "Value for $s is empty, exiting"
+        fi
+        path=$(echo $path | sed "s|%$s%|$match_value|g")
+    done
+    echo "$path"
+}
+
+# Gets the value of a variable by name, if it exists. Otherwise returns an empty string
+# $1: Name of the variable
+var_value() {
+    eval "echo \$${1}"
+}
+
+
+# $1 link source
+# $2 link destination
+# $3 force mode [default false|1]
+create_link() {
+    source_file="$1"
+    dest_link="$2"
+    force=${3:-1}
+
+    log_debug "create_link: source_file=$source_file dest_link=$dest_link force=$force"
+
+    if [ -e "$dest_link" ] && [ "$force" -ne 0 ]; then
+        log_warn "link or file already exists for $dest_link .... skipping"
+        return
+    fi
+    if [ -e "$dest_link" ] && [ "$force" -eq 0 ]; then
+        if [ -L "$dest_link" ]; then
+            log_warn "FORCE set, unlinking $dest_link"
+            dry_or_exec "unlink $dest_link"
+        elif [ -f "$dest_link" ]; then
+            log_warn "FORCE set, removing regular file $link_root/$relative_file"
+            dry_or_exec "rm $dest_link"
+        fi
+    fi
+
+    basedir="$(dirname $dest_link)"
+    if [ ! -d "$basedir" ]; then
+        log_debug "Creating directory structure at $basedir"
+        dry_or_exec "mkdir -p $basedir"
+    fi
+    log_info "Creating Link $source_file -> $dest_link"
+    dry_or_exec "ln -s $source_file $dest_link"
+}
+
+# strips the leading character for a string
+# $1: The string
+strip_leading_char() {
+    echo "${1#?}"
+}
+
+get_variable_by_name() {
+    echo ""
+}
 
 # $1 - line to conditionally add
 # $2 - file path to add
@@ -90,6 +176,7 @@ rootdo() {
         $@
     fi
 }
+
 
 # This helper function can be used for installing tools via uv
 # If a corresponding env var of the form $<PACKAGE NAME>_VERSION exists, then this is assumed to be

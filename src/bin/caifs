@@ -16,6 +16,7 @@ RUN_FORCE=${CAIFS_RUN_FORCE:-1}
 # Multiple targets could be specified. We will run them in order
 RUN_TARGETS=""
 VERBOSE=${CAIFS_VERBOSE:=1}
+DRY_RUN=${CAIFS_DRY_RUN:-1}
 
 # A list of directories to interogate for caifs libs
 CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
@@ -57,6 +58,11 @@ main() {
     if [ "$SUBCOMMAND" = "--verbose" ]; then
         #log_debug "Verbose flag set"
         VERBOSE=0;
+        SUBCOMMAND=$1
+        shift
+    fi
+    if [ "$SUBCOMMAND" = "--dry" ]; then
+        DRY_RUN=0
         SUBCOMMAND=$1
         shift
     fi
@@ -154,6 +160,7 @@ main() {
     esac
 }
 
+
 # Creates symbolic links for all files under the target config directory
 # It creates the directory structure, if it doesn't exist already
 # $1: collection path
@@ -162,31 +169,41 @@ create_target_links() {
     collection_path="$1"
     target=$2
     target_directory="${collection_path}/${target}/${CONFIG_DIR}"
+    link_root=$LINK_ROOT
     log_debug "Creating link for $@"
 
-    for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
-        log_debug "attempting to create link to $target_directory/$relative_file -> $LINK_ROOT/$relative_file"
+    for config_file in $(find ${target_directory} -type f -printf "%P\n" ); do
 
-        if [ -e $LINK_ROOT/$relative_file ] && [ "$RUN_FORCE" -ne 0 ]; then
-            log_warn "link or file already exists for $LINK_ROOT/$relative_file .... skipping"
-            continue
-        elif [ -e $LINK_ROOT/$relative_file ] && [ "$RUN_FORCE" -eq 0 ]; then
-            if [ -L $LINK_ROOT/$relative_file ]; then
-                log_warn "FORCE set, unlinking $LINK_ROOT/$relative_file"
-                unlink $LINK_ROOT/$relative_file
-            elif [ -f $LINK_ROOT/$relative_file ]; then
-                log_warn "FORCE set, removing regular file $LINK_ROOT/$relative_file"
-                rm $LINK_ROOT/$relative_file
+        log_debug "Processing $target_directory/$config_file"
+
+        #dest_file=$(replace_vars_in_string "$config_file")
+        # replace any variable place holders in the relative path, to form a destination path
+        # TODO: This should call replace_vars_in_string but the exiting doesn't work well
+        dest_file=$config_file
+        for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
+            match_value=$(eval "echo \$${s}")
+            if [ -z "$match_value" ]; then
+                log_error "Value for $s is empty, exiting"
             fi
-        fi
+            dest_file=$(echo $dest_file | sed "s|%$s%|$match_value|g")
+        done
 
-        basedir="$(dirname $LINK_ROOT/$relative_file)"
-        if [ ! -d "$basedir" ]; then
-            log_debug "Creating directory structure at $basedir"
-            mkdir -p "$basedir"
-        fi
-        log_info "Creating Link $target_directory/$relative_file -> $LINK_ROOT/$relative_file"
-        ln -s $target_directory/$relative_file $LINK_ROOT/$relative_file
+        # Check if the leading config entry has a ^ or % to indicate special actions
+        case "$config_file" in
+            ^*)
+                log_debug "$config_file is designated for root"
+                link_root="/"
+                # remove the caret from the start of the string
+                dest_file=$(strip_leading_char "$config_file")
+                break
+                ;;
+            *)
+                ;;
+        esac
+
+        #validate_path "$dest_file"
+        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$RUN_FORCE"
+
     done
 }
 
@@ -202,8 +219,7 @@ remove_target_links() {
     for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
         log_debug "Found ${relative_file}. Checking if link exists at $LINK_ROOT/$relative_file"
         if [ -L $LINK_ROOT/$relative_file ]; then
-            log_info "Removing link from $LINK_ROOT/$relative_file -> $target_directory/$relative_file"
-            unlink $LINK_ROOT/$relative_file
+            dry_or_exec "unlink $LINK_ROOT/$relative_file"
         fi
     done
 }
