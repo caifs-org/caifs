@@ -30,7 +30,7 @@ macos() {
 
 YOLO it onto your system to install locally within `~/.local/`
 
-`curl -sOL install.sh | sh`
+`curl -sL https://github.com/vasdee/caifs/install.sh | sh`
 
 OR
 
@@ -38,13 +38,13 @@ Install globally by using env var `INSTALL_PREFIX=/usr/local/` and root privileg
 
 `INSTALL_PREFIX=/usr/local/ curl -sOL https://github.com/vasdee/caifs/install.sh | sudo sh -c`
 
-Check it's working and on your path with 
+Check it's working and on your path with -
 
 `caifs --version` or `caifs --help`
 
 ## Adding configuration to a caifs collection
 
-CAIFS expects a simple structure for it work. 
+CAIFS expects a simple structure for it work
 
 Config files should live under the target name of an application, for example for a `.gitconfig` installed as part of the
 git target, you need this structure.
@@ -94,4 +94,7 @@ CAIFS_RUN_HOOKS
 
 * Figure out a nice way to install software in docker, but have it accessible to a non-root user
 * take the conventions from tuckr regarding config paths starting with a ^ - but elevate via rootdo
-*
+* switch tests to shunit2
+* add the root escalation for ^ paths
+* add the environment variable based linking
+
