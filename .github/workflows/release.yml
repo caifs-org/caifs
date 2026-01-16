@@ -38,7 +38,7 @@ jobs:
 
       - name: Zip the directory
         id: release
-        run: tar -czvf release.tar.gz dist/*
+        run: tar -czvf release.tar.gz -C dist/ .
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2.5.0
