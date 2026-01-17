@@ -213,7 +213,3 @@ A useful option when you want to see what would run, before you run it. This inc
 during a `--force` scenario. Also applies to hooks
 
 `--dry-run|-n` or  `$CAIFS_DRY_RUN=0`
-
-## Todo
-
-* take the conventions from tuckr regarding config paths starting with a ^ - but elevate via rootdo
