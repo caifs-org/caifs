@@ -1,17 +1,17 @@
 #!/bin/sh
 
 log_debug() {
-    if [ $VERBOSE = 0 ]; then
-        echo "DEBUG: $@"
+    if [ "$VERBOSE" -eq 0 ]; then
+        echo "DEBUG: $*"
     fi
 }
 
 log_info() {
-    echo "INFO: $@"
+    echo "INFO: $*"
 }
 
 log_warn() {
-    echo "WARN: $@"
+    echo "WARN: $*"
 }
 
 # $1: The error message
@@ -19,27 +19,29 @@ log_warn() {
 log_error() {
     rc=${2:-1}
     echo "ERROR: $1"
-    exit $rc
+    exit "$rc"
 }
 
 # Runs a command, if the DRY_RUN setting is not in effect
 dry_or_exec() {
     if [ "$DRY_RUN" -ne 0 ]; then
-        log_debug "COMMAND is $@"
+        log_debug "COMMAND is $*"
+        # shellcheck disable=SC2068
         $@
     else
-        log_info "DRY-RUN: Would have run $@"
+        log_info "DRY-RUN: Would have run $*"
     fi
 }
 
 # validate that a supplied path actually resembles a path
 # $1: The path to check
 validate_path() {
-    rc=$(pathchk "$1")
-    log_debug "pathchk rc=$rc"
+    pathchk "$1"
+    rc=$?
     if [ "$rc" -ne 0 ]; then
-        log_error "$1 does not appear to be a valid path"
+        log_error "$1 does not appear to be a valid path" $rc
     fi
+    return 0
 }
 
 # Replaces delimited variables in a given string, with the values of the string if they exist
@@ -47,14 +49,13 @@ validate_path() {
 # $2: delimiter [default: %]
 replace_vars_in_string() {
     path="$1"
-    remaining="$string"
 
-    for s in $(echo $path | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
+    for s in $(echo "$path" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
         match_value=$(eval "echo \$${s}")
         if [ -z "$match_value" ]; then
             log_error "Value for $s is empty, exiting"
         fi
-        path=$(echo $path | sed "s|%$s%|$match_value|g")
+        path=$(echo "$path" | sed "s|%$s%|$match_value|g")
     done
     echo "$path"
 }
@@ -63,6 +64,22 @@ replace_vars_in_string() {
 # $1: Name of the variable
 var_value() {
     eval "echo \$${1}"
+}
+
+# Checks if a supplied path has a leading ^ which indicates it is destined for root config
+# $1 the file path
+is_root_config() {
+    path=$1
+
+    case "$path" in
+        ^*)
+            log_debug "$path is designated for root"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 # Creates symbolic links for all files under the target config directory
@@ -75,9 +92,12 @@ create_target_links() {
     target=$2
     target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     link_root=$3
-    log_debug "Creating link for $@"
+    require_escalation=1
+    log_debug "Creating link for $*"
 
-    for config_file in $(find ${target_directory} -type f -printf "%P\n" ); do
+    # TODO - is there a solution to this that is more POSIX compliant?
+    # shellcheck disable=SC2044
+    for config_file in $(find "${target_directory}" -type f -printf "%P\n" ); do
 
         log_debug "Processing $target_directory/$config_file"
 
@@ -90,52 +110,58 @@ create_target_links() {
             if [ -z "$match_value" ]; then
                 log_error "Value for $s is empty, exiting"
             fi
-            dest_file=$(echo $dest_file | sed "s|%$s%|$match_value|g")
+            dest_file=$(echo "$dest_file" | sed "s|%$s%|$match_value|g")
         done
 
-        # Check if the leading config entry has a ^ or % to indicate special actions
-        case "$config_file" in
-            ^*)
-                log_debug "$config_file is designated for root"
+        # Check if the leading config entry has a ^ then we need to escalate to root
+        if [ "$(is_root_config "$config_file")" ]; then
                 link_root="/"
                 # remove the caret from the start of the string
                 dest_file=$(strip_leading_char "$config_file")
-                break
-                ;;
-            *)
-                ;;
-        esac
+                require_escalation=0
+        fi
 
         #validate_path "$dest_file"
-        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$RUN_FORCE"
-
+        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$require_escalation" "$RUN_FORCE"
     done
 }
 
 # Removes all symbolic links for all files under the target config directory
 # $1: collection path
 # $2: target
+# $3: the link_root to remove from
 remove_target_links() {
     collection_path="$1"
     target=$2
+    link_root=$3
     target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     log_debug "Removing links for target=$target in collection=$collection_path"
 
-    for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
-        log_debug "Found ${relative_file}. Checking if link exists at $LINK_ROOT/$relative_file"
-        if [ -L $LINK_ROOT/$relative_file ]; then
-            dry_or_exec "unlink $LINK_ROOT/$relative_file"
+    # TODO - is there a solution to this that is more POSIX compliant?
+    # shellcheck disable=SC2044
+    for config_file in $(find "${target_directory}" -type f -printf "%P\n" ); do
+        log_debug "Found ${config_file}. Checking if link exists at $link_root/$config_file"
+        if [ -L "$link_root/$config_file" ]; then
+
+            unlink_cmd="unlink $link_root/$config_file"
+            if [ "$(is_root_config "$config_file")" ]; then
+                link_root="/"
+                unlink_cmd="rootdo $unlink_cmd"
+            fi
+            dry_or_exec "$unlink_cmd"
         fi
     done
 }
 
 # $1: link source
 # $2: link destination
-# $3: force mode [default false|1]
+# $3: require root escalation [default 1: false]
+# $4: force mode [default false|1]
 create_link() {
     source_file="$1"
     dest_link="$2"
-    force=${3:-1}
+    require_escalation=${3:-1}
+    force=${4:-1}
 
     log_debug "create_link: source_file=$source_file dest_link=$dest_link force=$force"
 
@@ -148,49 +174,52 @@ create_link() {
             log_warn "FORCE set, unlinking $dest_link"
             dry_or_exec "unlink $dest_link"
         elif [ -f "$dest_link" ]; then
-            log_warn "FORCE set, removing regular file $link_root/$relative_file"
+            log_warn "FORCE set, removing regular file $dest_link"
             dry_or_exec "rm $dest_link"
         fi
     fi
 
-    basedir="$(dirname $dest_link)"
+    basedir=$(dirname "$dest_link")
     if [ ! -d "$basedir" ]; then
         log_debug "Creating directory structure at $basedir"
         dry_or_exec "mkdir -p $basedir"
     fi
+
+    link_cmd="ln -s $source_file $dest_link"
+    # if the destination link, starts with a / then we need to escalate to root
+    if [ "$require_escalation" -eq 0 ]; then
+        link_cmd="root_do $link_cmd"
+    fi
+
     log_info "Creating Link $source_file -> $dest_link"
-    dry_or_exec "ln -s $source_file $dest_link"
+    dry_or_exec "$link_cmd"
 }
 
-# strips the leading character for a string
+# strips the leading character for a string and returns the original string, sans first character
 # $1: The string
 strip_leading_char() {
     echo "${1#?}"
 }
 
-get_variable_by_name() {
-    echo ""
-}
-
 # $1 - line to conditionally add
 # $2 - file path to add
 add_line_to_file() {
-    mkdir -p $(dirname $2)
-    touch $2
-    if ! grep -q "${1}" ${2}; then
-        echo "${1}" >> ${2}
-        echo "Added ${1} to ${2}"
+    mkdir -p "$(dirname "$2")"
+    touch "$2"
+    if ! grep -q "${1}" "${2}"; then
+        echo "${1}" >> "${2}"
+        log_debug "Added ${1} to ${2}"
     else
-        echo "$1 already exists in ${2}....skipping"
+        log_info "$1 already exists in ${2}....skipping"
     fi
 }
 
 # Check if an exectuable exists
 # $1 name or path to executable
 has() {
-    if ! command -v $1 &>/dev/null; then
-        echo "$1 does not exist or is not executable"
-        echo "you might need to run 'caifs run $1' to install it"
+    if ! command -v "$1" > /dev/null 2>&1; then
+        log_warn "$1 does not exist or is not executable"
+        log_warn "you might need to run 'caifs run $1' to install it"
         return 1
     fi
     return 0
@@ -201,7 +230,7 @@ has() {
 has_or_exit() {
     rc=$(has "$@")
     if [ "$rc" -ne 0 ]; then
-        exit $rc
+        exit "$rc"
     fi
 }
 
@@ -209,9 +238,9 @@ has_or_exit() {
 # with remaining parameters
 check_and_exec_function() {
     func_name=$1
-    if type $func_name > /dev/null 2>&1; then
+    if type "$func_name" > /dev/null 2>&1; then
         shift 1
-        eval $func_name $*
+        eval "$func_name $*"
     fi
 }
 
@@ -228,14 +257,19 @@ version_from_env() {
     echo "$PACKAGE_VERSION"
 }
 
-# A wrapper function for elevating to sudo if required.
+# A wrapper function for elevating to sudo if required. Or failing that su -c
 # This function helps during container builds, as usually the container runs as root and sudo isn't installed.
 # This negates the need to add sudo, but must be run as root now
 rootdo() {
     # If this is not run as an elevated user, then attempt to run the entire script again as sudo
     if [ "$(id -u)" -ne 0 ]; then
-        sudo $@
+        if has sudo ; then
+            sudo "$@"
+        else
+            su -c "$@"
+        fi
     else
+        # shellcheck disable=SC2068
         $@
     fi
 }
@@ -254,12 +288,12 @@ uv_install() {
     if [ -n "$PACKAGE_VERSION" ]; then
         PACKAGE="$PACKAGE==$PACKAGE_VERSION"
     fi
-    uv tool install --upgrade $PACKAGE $*
+    uv tool install --upgrade "$PACKAGE $*"
 }
 
 # Removes a package via a uv tool install
 uv_uninstall() {
-    uv tool uninstall $@
+    uv tool uninstall "$@"
 }
 
 # Install a package via npm.
@@ -275,26 +309,26 @@ npm_install() {
     if [ -n "$PACKAGE_VERSION" ]; then
         PACKAGE="${PACKAGE}@${PACKAGE_VERSION}"
     fi
-    npm install --global $PACKAGE $*
+    npm install --global "$PACKAGE $*"
 }
 
 # Removes a managed package via npm
 npm_uninstall() {
-    npm uninstall --global $@
+    npm uninstall --global "$@"
 }
 
 # Gets the latest github tag from a given repo
 # Note: this function removes any optional v prefix of the tag, which seems to be a github convention
 # $1 repo path
 github_latest_tag() {
-    echo $(curl -sL https://api.github.com/repos/${1}/releases/latest | jq -r | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
+    curl -sL https://api.github.com/repos/"${1}"/releases/latest | jq -r | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/'
 }
 
 # Gets the latest tag for a given gitlab repository
 # Note: this function removes any optional v prefix of the tag, which seems to be a github convention
 # $1 project name or id
 gitlab_latest_tag() {
-    echo $(curl -sL https://gitlab.com/api/v4/projects/${1}/releases?per_page=1 | jq -r | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
+    curl -sL https://gitlab.com/api/v4/projects/"${1}"/releases?per_page=1 | jq -r | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/'
 }
 
 
@@ -304,16 +338,16 @@ gitlab_latest_tag() {
 # *_install functions are considered hooks, and should be developed per pre.sh or post.sh script as
 # required
 run_hook_functions() {
-    echo "Running $SCRIPT_ACTION hook for $SCRIPT_GROUP on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
+    log_info "Running $SCRIPT_ACTION hook for $SCRIPT_GROUP on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
 
     case "$OS_TYPE" in
         Linux)
             # Run the specific OS installers before the general purpose linux one
-            check_and_exec_function ${OS_ID}
+            check_and_exec_function "${OS_ID}"
 
             check_and_exec_function linux
 
-            unset -f ${OS_ID} linux
+            unset -f "${OS_ID}" linux
             ;;
         Darwin)
             check_and_exec_function macos
@@ -321,7 +355,10 @@ run_hook_functions() {
             unset -f macos darwin
             ;;
         *)
-            echo "Not a supported OS"
+            log_error "Not a supported OS"
+
+            # This is invoked directly, we can safely ignore it, as it does actually work
+            # shellcheck disable=SC2317
             exit 1
             ;;
     esac

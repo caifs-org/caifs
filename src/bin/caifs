@@ -1,7 +1,7 @@
 #!/bin/sh
 
-BINDIR=$(dirname $0)
-. ${BINDIR}/../lib/caifslib.sh
+BINDIR=$(dirname "$0")
+. "${BINDIR}"/../lib/caifslib.sh
 
 ##
 ## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
@@ -27,18 +27,23 @@ HOOKS_DIR=hooks
 # this can be overridden
 LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
 
-# Source the OS type
-OS_TYPE=$(uname -s)
-OS_ID=""
-OS_VERSION_ID=""
-OS_ARCH=$(uname -m)
+# Source the OS type and export the most useful for being available in executed scripts
+export OS_TYPE=
+OS_TYPE="$(uname -s)"
 
-if [ ${OS_TYPE} = "Linux" ]; then
+export OS_ID=""
+export OS_VERSION_ID=""
+
+export OS_ARCH=
+OS_ARCH="$(uname -m)"
+
+if [ "${OS_TYPE}" = "Linux" ]; then
+    # shellcheck disable=SC1091
     . /etc/os-release
     OS_ID=${ID}
     OS_VERSION_ID=${VERSION_ID}
 
-elif [ ${OS_TYPE} = "Darwin" ]; then
+elif [ "${OS_TYPE}" = "Darwin" ]; then
     OS_ID=$(sw_vers -productName)
     OS_VERSION_ID=$(sw_vers -productVersion)
 else
@@ -51,7 +56,7 @@ print_help() {
 }
 
 main() {
-    log_debug "Parsing Arguments $@"
+    log_debug "Parsing Arguments $*"
     SUBCOMMAND=$1
     shift # Remove subcommand name from the argument list
 
@@ -79,6 +84,7 @@ main() {
         add)
             # Parse 'run' specific options
             SUB_TEMP=$(getopt -o r:nflhd: -l link-root:,dry-run,force,links,hooks,directory: -n "run" -- "$@")
+            # shellcheck disable=SC2181
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
 
@@ -90,7 +96,7 @@ main() {
                     # If directory is specified, override any collection paths and just work with this directory
                     -d|--directory)
                         if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
-                            ARG_CAIFS_COLLECTIONS="${ARG_CAIFS_COLLECTIONS}:$(realpath $2)"
+                            ARG_CAIFS_COLLECTIONS="${ARG_CAIFS_COLLECTIONS}:$(realpath "$2")"
                         else
                             ARG_CAIFS_COLLECTIONS=$(realpath "$2")
                         fi
@@ -108,9 +114,9 @@ main() {
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
                 CAIFS_COLLECTIONS=$ARG_CAIFS_COLLECTIONS
             fi
-            RUN_TARGETS=$@
+            RUN_TARGETS="$*"
 
-            log_debug $RUN_TARGETS
+            log_debug "$RUN_TARGETS"
             if [ -z "$RUN_TARGETS" ]; then
                 echo "At least one target is required!"
                 exit 1
@@ -121,6 +127,7 @@ main() {
             ;;
         rm)
             SUB_TEMP=$(getopt -o r:nlhd: -l link-root:,dry-run,links,hooks,directory: -n "rm" -- "$@")
+            # shellcheck disable=SC2181
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
 
@@ -129,7 +136,7 @@ main() {
                 case "$1" in
                     -d|--directory)
                         if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
-                            ARG_CAIFS_COLLECTIONS="${ARG_CAIFS_COLLECTIONS}:$(realpath $2)"
+                            ARG_CAIFS_COLLECTIONS="${ARG_CAIFS_COLLECTIONS}:$(realpath "$2")"
                         else
                             ARG_CAIFS_COLLECTIONS=$(realpath "$2")
                         fi
@@ -177,17 +184,18 @@ run_hook() {
     hook_type=$3
     log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
 
-    if [ -f $collection_path/$target/$HOOKS_DIR/${hook_type}.sh ]; then
+    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
         TMP_DIR=$(mktemp -d)
-        cd ${TMP_DIR}
+        cd "${TMP_DIR}" || exit
 
+        # shellcheck disable=SC1090
         # import the hook script functions
-        . $collection_path/$target/$HOOKS_DIR/${hook_type}.sh
+        . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
         run_hook_functions
 
-        cd -
-        rm -rf ${TMP_DIR}
+        cd - || exit
+        rm -rf "${TMP_DIR}"
     else
         log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
     fi
@@ -196,19 +204,19 @@ run_hook() {
 # $1: collection path
 # $2: The target name to run the hook for
 run_remove_hook() {
-    run_hook $@ "rm"
+    run_hook "$@" "rm"
 }
 
 # $1: collection path
 # $2: The target name to run the hook for
 run_pre_hook() {
-    run_hook $@ "pre"
+    run_hook "$@" "pre"
 }
 
 # $1: collection path
 # $2: The target name to run the hook for
 run_post_hook() {
-    run_hook $@ "post"
+    run_hook "$@" "post"
 }
 
 
@@ -227,11 +235,11 @@ cmd_remove() {
             log_debug "$target"
 
             if [ "$RUN_LINKS" -eq 0 ]; then
-                remove_target_links ${caifs_collection} ${target}
+                remove_target_links "${caifs_collection}" "${target}" "${LINK_ROOT}"
             fi
 
             if [ "$RUN_HOOKS" -eq 0 ]; then
-                run_remove_hook ${caifs_collection} "$target"
+                run_remove_hook "${caifs_collection}" "$target"
             fi
         done
             # Loop control, get the next path to operate on
@@ -239,7 +247,7 @@ cmd_remove() {
             # No more paths available. End the loop
             collection_paths=""
         else
-            collection_paths="${collection_paths#*${caifs_collection}:}"
+            collection_paths="${collection_paths#*"${caifs_collection}":}"
         fi
     done
 }
@@ -265,7 +273,7 @@ cmd_add() {
             fi
 
             if [ "$RUN_LINKS" -eq 0 ]; then
-                create_target_links ${caifs_collection} ${target} ${LINK_ROOT}
+                create_target_links "${caifs_collection}" "${target}" "${LINK_ROOT}"
             fi
 
             if [ "$RUN_HOOKS" -eq 0 ]; then
@@ -278,7 +286,7 @@ cmd_add() {
             # No more paths available. End the loop
             collection_paths=""
         else
-            collection_paths="${collection_paths#*${caifs_collection}:}"
+            collection_paths="${collection_paths#*"${caifs_collection}":}"
         fi
     done
 

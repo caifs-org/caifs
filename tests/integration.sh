@@ -104,10 +104,13 @@ testEnvVarInConfigPathVarSet() {
     assertTrue ".editorconfig should exist at $CAIFS_LINK_ROOT/code" "[ -f $CAIFS_LINK_ROOT/.test/code/private/.editorconfig ]"
 }
 
-testReplaceVarsInString() {
-    echo 1
+test_root_config_file_create() {
+    echo "need to add this test"
 }
 
+test_root_config_file_unlink() {
+    echo "need to add this test"
+}
 
 
 

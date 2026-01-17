@@ -1,14 +1,14 @@
 # Config And Installers For Software - CAIFS
 
-CAIFS is a tool to handle installing software across various unix-like operating systems. If you work with multiple 
-flavours of linux, build docker containers and work with macs, then this tool will help you consistently install 
+CAIFS is a tool to handle installing software across various unix-like operating systems. If you work with multiple
+flavours of linux, build docker containers and work with macs, then this tool will help you consistently install
 software and matching configuration across all of them.
 
-CAIFS takes inspiration from Stow and especially Tuckr, in that it is a dotfile manager, with the ability to run scripts. 
-Unlike Tuckr though, CAIFS takes it a step further and allows you to define different installs for different operating systems
-and even architectures. This is done via hook scripts and defining custom functions per os-flavour
+CAIFS takes inspiration from Stow and especially Tuckr, in that it is a dotfile manager, with the ability to run
+scripts. Unlike Tuckr though, CAIFS takes it a step further and allows you to define different installs for different
+operating systems and even architectures. This is done via hook scripts and defining custom functions per os-flavour
 
-For example, the following hook script (a `pre.sh` in this case), demonstrates how a single hook script can be defined 
+For example, the following hook script (a `pre.sh` in this case), demonstrates how a single hook script can be defined
 to work across operating systems, in this case installing curl in three different ways.
 
 ``` shell
@@ -44,7 +44,7 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
 
 > [!IMPORTANT]
 > This CAIFS repo does not container installers, this is just the shell script for managing your own set of installers
-> See a curated library of scores of installers at https://github.com/vasdee/caifs-common/
+> See a curated library of scores of installers at <https://github.com/vasdee/caifs-common/>
 
 ## Install and Usage
 
@@ -64,15 +64,15 @@ Check it's working and on your path with -
 
 ## Creating a caifs collection
 
-CAIFS expects a simple structure for it work, a containing directory, with the name of the software target, for example, 
+CAIFS expects a simple structure for it work, a containing directory, with the name of the software target, for example,
 `curl/`, `git/`, `just/` etc, and 1 or both of the subdirectories called `config` and `hooks`.
 
-Config files should live under the target name of an application, for example for a `.gitconfig` installed as part of the
-git target, you need this structure.
+Config files should live under the target name of an application, for example for a `.gitconfig` installed as part of
+the git target, you need this structure.
 
 `git/config/.gitconfig`
 
-Three types of hooks exist, `pre.sh`, `post.sh` and `rm.sh`. Following on from the above example, if you wanted to do a 
+Three types of hooks exist, `pre.sh`, `post.sh` and `rm.sh`. Following on from the above example, if you wanted to do a
 `pre.sh` hook that installed git, before the configuration was symlinked across, then this would like like:
 
 `git/hooks/pre.sh`
@@ -105,30 +105,31 @@ CAIFS_COLLECTIONS="~/my-personal-collection:~/my-work-collection" \
 
 ## Advanced CAIFS Configuration and Usage
 
-By default, running `caifs run <target>` will run both hooks and links for the `<target>` in the current working directory,
-defined by `$PWD`.
+By default, running `caifs run <target>` will run both hooks and links for the `<target>` in the current working
+directory, defined by `$PWD`.
 
 ### Define multiple collections
 
 The environment variable, `$CAIFS_COLLECTIONS`, can be set with multiple `:`-delimited directory paths. Much like the
-standard `$PATH` variable. Setting this variable is the equivalent of supplying multiple `-d|--directory` 
-arguments to the `caifs add|rm ` command itself. 
+standard `$PATH` variable. Setting this variable is the equivalent of supplying multiple `-d|--directory`
+arguments to the `caifs add|rm` command itself.
 
-Using the `-d|--directory` arguments _will_ override any `$CAIFS_COLLECTIONS` variable set, allowing you to work with a 
+Using the `-d|--directory` arguments _will_ override any `$CAIFS_COLLECTIONS` variable set, allowing you to work with a
 collection in isolation.
 
 ### Install to non-$HOME area
 
-By default, CAIFS configuration will be linked to the current `$HOME` variable. This is desirable for most use cases 
+By default, CAIFS configuration will be linked to the current `$HOME` variable. This is desirable for most use cases
 where you want to manage personal dotfiles.
 
-If you need to manage files beyond the `$HOME` area, perhaps you have some custom networking that is required to be added 
-underneath `/` - then CAIFS has two options. 
+If you need to manage files beyond the `$HOME` area, perhaps you have some custom networking that is required to be
+added underneath `/` - then CAIFS has two options.
 
 #### Leading ^ character in config path
 
-A config file under `<target>/config/` with a leading `^` will be interpreted as being a `/` or root level file. 
-For example, `my_sudo/config/^etc/sudoers.d/01-mysudo.conf` will be attempted to be linked to `/etc/sudoers.d/01-mysudo.conf`
+A config file under `<target>/config/` with a leading `^` will be interpreted as being a `/` or root level file. For
+example, `my_sudo/config/^etc/sudoers.d/01-mysudo.conf` will be attempted to be linked to
+`/etc/sudoers.d/01-mysudo.conf`
 
 Attempted, because CAIFS will attempt to escalate privileges
 
@@ -141,14 +142,14 @@ Attempted, because CAIFS will attempt to escalate privileges
 
 #### Altering the CAIFS_LINK_ROOT variable
 
-It may be useful in certain situations, particularly in docker builds which generally run as root, to set an alternative 
-to the default `$HOME` destination for links. 
+It may be useful in certain situations, particularly in docker builds which generally run as root, to set an alternative
+to the default `$HOME` destination for links.
 
 You can specify this with the `-r|--link-root` flags for the `add|rm` commands or use the `$CAIFS_LINK_ROOT` environment
 variable
 
-In a typical docker builds, or perhaps escalated automation scenarios where you are running as root, but want the 
-configuration to be placed into another users home directory. 
+In a typical docker builds, or perhaps escalated automation scenarios where you are running as root, but want the
+configuration to be placed into another users home directory.
 
 ``` Dockerfile
 FROM debian:trixie-slim
@@ -204,12 +205,11 @@ Run only the hooks component during an `add` or `rm` action. This effectively di
 
 The following is the equivalent of the default, which is to run both hooks and links
 
-`caifs add curl --hooks --links` 
-
+`caifs add curl --hooks --links`
 
 #### Don't do anything to the filesystem
 
-A useful option when you want to see what would run, before you run it. This includes the removal of links, or files 
+A useful option when you want to see what would run, before you run it. This includes the removal of links, or files
 during a `--force` scenario. Also applies to hooks
 
 `--dry-run|-n` or  `$CAIFS_DRY_RUN=0`
@@ -217,4 +217,3 @@ during a `--force` scenario. Also applies to hooks
 ## Todo
 
 * take the conventions from tuckr regarding config paths starting with a ^ - but elevate via rootdo
-

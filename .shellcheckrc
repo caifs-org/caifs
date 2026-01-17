@@ -1,0 +1,4 @@
+shell=sh
+
+disable=SC1091
+source-path=src/lib/
