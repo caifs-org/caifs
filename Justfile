@@ -1,6 +1,7 @@
 set export
 
 SHUNIT2_VERSION := '2.1.8'
+CAIFS_VERBOSE := env('CAIFS_VERBOSE', '1')
 
 [script]
 download-shunit:
@@ -16,4 +17,5 @@ download-shunit:
 [script]
 test:
     cd tests/
-    ./tests.sh
+    ./integration.sh
+    ./unit.sh

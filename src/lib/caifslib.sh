@@ -65,10 +65,73 @@ var_value() {
     eval "echo \$${1}"
 }
 
+# Creates symbolic links for all files under the target config directory
+# It creates the directory structure, if it doesn't exist already
+# $1: collection path
+# $2: target
+# $3: root directory to link the files in
+create_target_links() {
+    collection_path="$1"
+    target=$2
+    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
+    link_root=$3
+    log_debug "Creating link for $@"
 
-# $1 link source
-# $2 link destination
-# $3 force mode [default false|1]
+    for config_file in $(find ${target_directory} -type f -printf "%P\n" ); do
+
+        log_debug "Processing $target_directory/$config_file"
+
+        #dest_file=$(replace_vars_in_string "$config_file")
+        # replace any variable place holders in the relative path, to form a destination path
+        # TODO: This should call replace_vars_in_string but the exiting doesn't work well
+        dest_file=$config_file
+        for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
+            match_value=$(eval "echo \$${s}")
+            if [ -z "$match_value" ]; then
+                log_error "Value for $s is empty, exiting"
+            fi
+            dest_file=$(echo $dest_file | sed "s|%$s%|$match_value|g")
+        done
+
+        # Check if the leading config entry has a ^ or % to indicate special actions
+        case "$config_file" in
+            ^*)
+                log_debug "$config_file is designated for root"
+                link_root="/"
+                # remove the caret from the start of the string
+                dest_file=$(strip_leading_char "$config_file")
+                break
+                ;;
+            *)
+                ;;
+        esac
+
+        #validate_path "$dest_file"
+        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$RUN_FORCE"
+
+    done
+}
+
+# Removes all symbolic links for all files under the target config directory
+# $1: collection path
+# $2: target
+remove_target_links() {
+    collection_path="$1"
+    target=$2
+    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
+    log_debug "Removing links for target=$target in collection=$collection_path"
+
+    for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
+        log_debug "Found ${relative_file}. Checking if link exists at $LINK_ROOT/$relative_file"
+        if [ -L $LINK_ROOT/$relative_file ]; then
+            dry_or_exec "unlink $LINK_ROOT/$relative_file"
+        fi
+    done
+}
+
+# $1: link source
+# $2: link destination
+# $3: force mode [default false|1]
 create_link() {
     source_file="$1"
     dest_link="$2"

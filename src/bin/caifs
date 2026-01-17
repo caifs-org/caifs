@@ -1,7 +1,7 @@
 #!/bin/sh
 
 BINDIR=$(dirname $0)
-. ${BINDIR}/../lib/utils.sh
+. ${BINDIR}/../lib/caifslib.sh
 
 ##
 ## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
@@ -55,18 +55,18 @@ main() {
     SUBCOMMAND=$1
     shift # Remove subcommand name from the argument list
 
-    if [ "$SUBCOMMAND" = "--verbose" ]; then
+    if [ "$SUBCOMMAND" = "--verbose" ] || [ "$SUBCOMMAND" = "-v" ]; then
         #log_debug "Verbose flag set"
         VERBOSE=0;
         SUBCOMMAND=$1
         shift
     fi
-    if [ "$SUBCOMMAND" = "--dry" ]; then
+    if [ "$SUBCOMMAND" = "--dry-run" ] || [ "$SUBCOMMAND" = "-n" ]; then
         DRY_RUN=0
         SUBCOMMAND=$1
         shift
     fi
-    if [ "$SUBCOMMAND" = "--help" ]; then
+    if [ "$SUBCOMMAND" = "--help" ] || [ "$SUBCOMMAND" = "-h" ]; then
         print_help
         exit 0
     fi
@@ -76,9 +76,9 @@ main() {
     fi
 
     case "$SUBCOMMAND" in
-        run)
+        add)
             # Parse 'run' specific options
-            SUB_TEMP=$(getopt -o flhd: -l force,links,hooks,directory: -n "run" -- "$@")
+            SUB_TEMP=$(getopt -o r:nflhd: -l link-root:,dry-run,force,links,hooks,directory: -n "run" -- "$@")
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
 
@@ -96,6 +96,8 @@ main() {
                         fi
                         shift 2
                         ;;
+                    -n|--dry-run) DRY_RUN=0; shift ;;
+                    -r|--link-root) LINK_ROOT=$(realpath "$2"); shift 2;;
                     -f|--force) RUN_FORCE=0; shift ;;
                     --) shift; break ;;
                     *) break ;;
@@ -115,10 +117,10 @@ main() {
             fi
 
             log_debug "$SUBCOMMAND RUN_TARGETS=$RUN_TARGETS | VERBOSE=$VERBOSE RUN_LINKS=$RUN_LINKS RUN_HOOKS=$RUN_HOOKS ROOT_DIRECTORY CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS"
-            cmd_run
+            cmd_add
             ;;
         rm)
-            SUB_TEMP=$(getopt -o lhd: -l links,hooks,directory: -n "rm" -- "$@")
+            SUB_TEMP=$(getopt -o r:nlhd: -l link-root:,dry-run,links,hooks,directory: -n "rm" -- "$@")
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
 
@@ -135,6 +137,8 @@ main() {
                         ;;
                     -l|--links) RUN_HOOKS=1; shift ;;
                     -h|--hooks) RUN_LINKS=1; shift ;;
+                    -n|--dry-run) DRY_RUN=0; shift ;;
+                    -r|--link-root) LINK_ROOT=$(realpath "$2"); shift 2;;
                     --) shift; break ;;
                     *) break ;;
                 esac
@@ -160,69 +164,6 @@ main() {
     esac
 }
 
-
-# Creates symbolic links for all files under the target config directory
-# It creates the directory structure, if it doesn't exist already
-# $1: collection path
-# $2: target
-create_target_links() {
-    collection_path="$1"
-    target=$2
-    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
-    link_root=$LINK_ROOT
-    log_debug "Creating link for $@"
-
-    for config_file in $(find ${target_directory} -type f -printf "%P\n" ); do
-
-        log_debug "Processing $target_directory/$config_file"
-
-        #dest_file=$(replace_vars_in_string "$config_file")
-        # replace any variable place holders in the relative path, to form a destination path
-        # TODO: This should call replace_vars_in_string but the exiting doesn't work well
-        dest_file=$config_file
-        for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
-            match_value=$(eval "echo \$${s}")
-            if [ -z "$match_value" ]; then
-                log_error "Value for $s is empty, exiting"
-            fi
-            dest_file=$(echo $dest_file | sed "s|%$s%|$match_value|g")
-        done
-
-        # Check if the leading config entry has a ^ or % to indicate special actions
-        case "$config_file" in
-            ^*)
-                log_debug "$config_file is designated for root"
-                link_root="/"
-                # remove the caret from the start of the string
-                dest_file=$(strip_leading_char "$config_file")
-                break
-                ;;
-            *)
-                ;;
-        esac
-
-        #validate_path "$dest_file"
-        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$RUN_FORCE"
-
-    done
-}
-
-# Removes all symbolic links for all files under the target config directory
-# $1: collection path
-# $2: target
-remove_target_links() {
-    collection_path="$1"
-    target=$2
-    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
-    log_debug "Removing links for target=$target in collection=$collection_path"
-
-    for relative_file in $(find ${target_directory} -type f -printf "%P\n" ); do
-        log_debug "Found ${relative_file}. Checking if link exists at $LINK_ROOT/$relative_file"
-        if [ -L $LINK_ROOT/$relative_file ]; then
-            dry_or_exec "unlink $LINK_ROOT/$relative_file"
-        fi
-    done
-}
 
 # Run a specific type of hook for a given target.
 # Sandbox the hook script by copying the script and injecting the utilities module in
@@ -305,8 +246,8 @@ cmd_remove() {
 
 # Loop over the CAIFS_COLLECTIONS variable, which is colon (:) separated paths to caifs collections
 # First target wins, so order in the collection is important.
-cmd_run() {
-    log_debug "Starting run with collection_paths '$CAIFS_COLLECTIONS'"
+cmd_add() {
+    log_debug "cmd_add: begin with collection_paths '$CAIFS_COLLECTIONS'"
 
     collection_paths="$CAIFS_COLLECTIONS"
 
@@ -324,7 +265,7 @@ cmd_run() {
             fi
 
             if [ "$RUN_LINKS" -eq 0 ]; then
-                create_target_links ${caifs_collection} ${target}
+                create_target_links ${caifs_collection} ${target} ${LINK_ROOT}
             fi
 
             if [ "$RUN_HOOKS" -eq 0 ]; then
@@ -340,6 +281,8 @@ cmd_run() {
             collection_paths="${collection_paths#*${caifs_collection}:}"
         fi
     done
+
+    log_debug "cmd_add: end"
 }
 
 main "$@"

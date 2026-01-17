@@ -25,10 +25,13 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v3
 
       # Runs a single command using the runners shell
       - name: Run the tests
-        run: ./tests.sh
+        run: |
+          just download-shunit
+          just test
 
       - name: Create release directory
         run: |

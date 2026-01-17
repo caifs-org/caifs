@@ -51,18 +51,18 @@ testFilesExists() {
 }
 
 testCheckBasicLinking() {
-    caifs run git -d $COLLECTION_BASE_DIR/dummy_0 --links
+    caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --links
     assertTrue ".gitconfig should be linked to $CAIFS_LINK_ROOT/.gitconfig" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
 }
 
 
 testHooksRunWithoutLinks() {
-    caifs run git -d $COLLECTION_BASE_DIR/dummy_0 --hooks
+    caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --hooks
     assertTrue ".gitconfig should not be linked to root dir" "[ ! -L $CAIFS_LINK_ROOT/.gitconfig ]"
 }
 
 testRemovingLinks() {
-    caifs run git -d $COLLECTION_BASE_DIR/dummy_0 --links
+    caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --links
     assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
 
     caifs rm git -d $COLLECTION_BASE_DIR/dummy_0 --links
@@ -72,27 +72,24 @@ testRemovingLinks() {
 testMultipleCollections() {
     _touchpath $COLLECTION_BASE_DIR/dummy_1/git/config/.gitconfig-private
 
-    caifs run git -d $COLLECTION_BASE_DIR/dummy_0 -d $COLLECTION_BASE_DIR/dummy_1 --links
+    caifs add git -d $COLLECTION_BASE_DIR/dummy_0 -d $COLLECTION_BASE_DIR/dummy_1 --links
     assertTrue "Private gitconfig should exist from the dummy_0 root" "[ -f $CAIFS_LINK_ROOT/.gitconfig-private ]"
 }
 
 testEnvVarInConfigPathMissing() {
-    export CAIFS_VERBOSE=0
     path_with_env=$COLLECTION_BASE_DIR/dummy_1/editorconfig/config/%CODE_DIR%/.editorconfig
     _touchpath $path_with_env
     assertTrue "$path_with_env should exist on the file system" "[ -f $path_with_env ]"
 
     assertTrue "CODE_DIR should be empty" "[ -z $CODE_DIR ]"
 
-    caifs run editorconfig -d $COLLECTION_BASE_DIR/dummy_1 --links
+    caifs add editorconfig -d $COLLECTION_BASE_DIR/dummy_1 --links
     rc=$?
     assertTrue "caifs should fail with missing env var" "[ $rc -ne 0 ]"
 }
 
 testEnvVarInConfigPathVarSet() {
     path_with_env=$COLLECTION_BASE_DIR/dummy_1/editorconfig/config/.test/%CODE_DIR%/.editorconfig
-
-    export CAIFS_VERBOSE=0
     # Don't use ~ here, because we are in temp dirs. CAIFS_LINK_ROOT is the target
     export CODE_DIR="code/private"
 
@@ -101,7 +98,7 @@ testEnvVarInConfigPathVarSet() {
 
     assertTrue "CODE_DIR should not be empty" "[ -n $CODE_DIR ]"
 
-    caifs run editorconfig -d $COLLECTION_BASE_DIR/dummy_1
+    caifs add editorconfig -d $COLLECTION_BASE_DIR/dummy_1
     rc=$?
     assertTrue "caifs should process successfully" "[ $rc -eq 0 ]"
     assertTrue ".editorconfig should exist at $CAIFS_LINK_ROOT/code" "[ -f $CAIFS_LINK_ROOT/.test/code/private/.editorconfig ]"
