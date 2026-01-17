@@ -1,0 +1,94 @@
+#!/bin/sh
+#
+# tuckr2caifs - Convert a Tuckr dotfiles directory to CAIFS collection format
+#
+# Tuckr format:
+#   Configs/<target>/<files>
+#   Hooks/<target>/<scripts>
+#
+# CAIFS format:
+#   <target>/config/<files>
+#   <target>/hooks/<scripts>
+
+set -e
+
+usage() {
+    echo "Usage: $(basename "$0") <source_dir> <target_dir>"
+    echo ""
+    echo "Convert a Tuckr dotfiles directory to CAIFS collection format."
+    echo ""
+    echo "Arguments:"
+    echo "  source_dir  Tuckr dotfiles directory containing Configs/ and/or Hooks/"
+    echo "  target_dir  Output directory for the CAIFS collection"
+    echo ""
+    echo "Example:"
+    echo "  $(basename "$0") ~/.config/dotfiles ~/caifs-dotfiles"
+    exit 1
+}
+
+if [ $# -ne 2 ]; then
+    usage
+fi
+
+SOURCE_DIR="$1"
+TARGET_DIR="$2"
+
+if [ ! -d "$SOURCE_DIR" ]; then
+    echo "Error: Source directory '$SOURCE_DIR' does not exist"
+    exit 1
+fi
+
+CONFIGS_DIR="$SOURCE_DIR/Configs"
+HOOKS_DIR="$SOURCE_DIR/Hooks"
+
+if [ ! -d "$CONFIGS_DIR" ] && [ ! -d "$HOOKS_DIR" ]; then
+    echo "Error: Source directory must contain Configs/ and/or Hooks/ directories"
+    exit 1
+fi
+
+# Create target directory
+mkdir -p "$TARGET_DIR"
+
+# Get all unique target names from both Configs and Hooks
+targets=""
+if [ -d "$CONFIGS_DIR" ]; then
+    for dir in "$CONFIGS_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        name=$(basename "$dir")
+        targets="$targets $name"
+    done
+fi
+if [ -d "$HOOKS_DIR" ]; then
+    for dir in "$HOOKS_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        name=$(basename "$dir")
+        # Add only if not already in list
+        case " $targets " in
+            *" $name "*) ;;
+            *) targets="$targets $name" ;;
+        esac
+    done
+fi
+
+# Process each target
+for target in $targets; do
+    echo "Processing: $target"
+
+    # Copy configs if they exist
+    if [ -d "$CONFIGS_DIR/$target" ]; then
+        mkdir -p "$TARGET_DIR/$target/config"
+        cp -r "$CONFIGS_DIR/$target/." "$TARGET_DIR/$target/config/"
+        echo "  Copied configs -> $target/config/"
+    fi
+
+    # Copy hooks if they exist
+    if [ -d "$HOOKS_DIR/$target" ]; then
+        mkdir -p "$TARGET_DIR/$target/hooks"
+        cp -r "$HOOKS_DIR/$target/." "$TARGET_DIR/$target/hooks/"
+        echo "  Copied hooks -> $target/hooks/"
+    fi
+done
+
+echo ""
+echo "Conversion complete: $TARGET_DIR"
+echo "Found $(echo $targets | wc -w | tr -d ' ') targets"

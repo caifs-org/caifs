@@ -11,16 +11,16 @@ RUN_LINKS=${CAIFS_RUN_LINKS:-0}
 RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
 
 # Force the override of existing link targets
-RUN_FORCE=${CAIFS_RUN_FORCE:-1}
+export RUN_FORCE="${CAIFS_RUN_FORCE:-1}"
 
 # Multiple targets could be specified. We will run them in order
 RUN_TARGETS=""
 VERBOSE=${CAIFS_VERBOSE:=1}
-DRY_RUN=${CAIFS_DRY_RUN:-1}
+export DRY_RUN="${CAIFS_DRY_RUN:-1}"
 
-# A list of directories to interogate for caifs libs
+# A list of directories to interogate for caifs collections
 CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
-CONFIG_DIR=config
+export CONFIG_DIR=config
 HOOKS_DIR=hooks
 
 # The root directory of where config should link to. By default it should be home, but for root scenarios
@@ -52,17 +52,66 @@ fi
 
 
 print_help() {
-    echo "Help"
+    cat << 'EOF'
+Usage: caifs [--verbose] [--help] [--version] <command> [options] <targets...>
+
+Config And Installers For Software - a cross-platform dotfile manager and installer.
+
+Commands:
+  run <targets...>    Run hooks and create symlinks for targets (alias: add)
+  rm <targets...>     Remove symlinks and run removal hooks for targets
+
+Run options:
+  -d, --directory <path>  Collection directory (can be specified multiple times)
+  -l, --links             Only create symlinks, skip hooks
+  -h, --hooks             Only run hooks, skip symlinks
+  -f, --force             Overwrite existing files/links
+
+Remove options:
+  -d, --directory <path>  Collection directory (can be specified multiple times)
+  -l, --links             Only remove symlinks, skip rm hooks
+  -h, --hooks             Only run rm hooks, skip symlink removal
+
+Global options:
+  --verbose               Enable debug output
+  --help                  Show this help message
+  --version               Show version number
+
+Environment variables:
+  CAIFS_COLLECTIONS       Colon-separated list of collection paths (default: $PWD)
+  CAIFS_LINK_ROOT         Destination root for symlinks (default: $HOME)
+  CAIFS_VERBOSE           Set to 0 to enable debug output
+  CAIFS_RUN_FORCE         Set to 0 to force overwrite existing files/links
+  CAIFS_RUN_LINKS         Set to 1 to skip symlinking
+  CAIFS_RUN_HOOKS         Set to 1 to skip hooks
+
+Examples:
+  caifs add git                       Run git target from current directory
+  caifs add git bash -d ~/dotfiles    Run multiple targets from specified collection
+  caifs add nvim --links              Only symlink nvim configs, skip hooks
+  caifs add docker --hooks            Only run docker hooks, skip symlinks
+  caifs add bash --force              Overwrite existing bash config files
+  caifs rm git -d ~/dotfiles --links  Remove symlinks for git target
+EOF
 }
 
 main() {
     log_debug "Parsing Arguments $*"
+
+    if [ $# -eq 0 ]; then
+        print_help
+        exit 1
+    fi
+
     SUBCOMMAND=$1
-    shift # Remove subcommand name from the argument list
+    shift
 
     if [ "$SUBCOMMAND" = "--verbose" ] || [ "$SUBCOMMAND" = "-v" ]; then
-        #log_debug "Verbose flag set"
         VERBOSE=0;
+        if [ $# -eq 0 ]; then
+            print_help
+            exit 1
+        fi
         SUBCOMMAND=$1
         shift
     fi
@@ -160,12 +209,10 @@ main() {
             log_debug "$SUBCOMMAND CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS RUN_TARGETS=$RUN_TARGETS"
             cmd_remove
             ;;
-        "")
-            echo "No subcommand provided."
-            exit 1
-            ;;
         *)
             echo "Unknown subcommand: $SUBCOMMAND"
+            echo ""
+            print_help
             exit 1
             ;;
     esac

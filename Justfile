@@ -3,6 +3,9 @@ set export
 SHUNIT2_VERSION := '2.1.8'
 CAIFS_VERBOSE := env('CAIFS_VERBOSE', '1')
 
+help:
+    just --list
+
 [script]
 download-shunit:
     cd tests/

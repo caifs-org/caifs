@@ -23,6 +23,7 @@ macos() {
 
 debian() {
     rootdo apt-get install -y curl
+}
 ```
 
 Running the hooks on your Fedora, MacOS or Debian host in this case would be performed by
@@ -37,7 +38,7 @@ FROM debian:trixie-slim
 RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
     caifs add curl --hooks
 
-# Your other docker image build 
+# Your other docker image build
 ...
 
 ```
@@ -62,20 +63,80 @@ Check it's working and on your path with -
 
 `caifs --version` or `caifs --help`
 
-## Creating a caifs collection
+## Collection Structure
 
-CAIFS expects a simple structure for it work, a containing directory, with the name of the software target, for example,
-`curl/`, `git/`, `just/` etc, and 1 or both of the subdirectories called `config` and `hooks`.
+A CAIFS collection is a directory containing targets. Each target has a `config/` directory for files to symlink and an
+optional `hooks/` directory for install scripts.
 
-Config files should live under the target name of an application, for example for a `.gitconfig` installed as part of
-the git target, you need this structure.
+```text
+my-dotfiles/
+├── git/
+│   ├── config/
+│   │   ├── .gitconfig
+│   │   └── .gitconfig.d/
+│   │       └── aliases.config
+│   └── hooks/
+│       └── pre.sh
+├── bash/
+│   └── config/
+│       ├── .bashrc
+│       └── .bashrc.d/
+│           └── aliases.bash
+└── nvim/
+    └── config/
+        └── .config/
+            └── nvim/
+                └── init.lua
+```
 
-`git/config/.gitconfig`
+**Config files** mirror their destination path relative to `$HOME` (or `$CAIFS_LINK_ROOT`):
+
+- `git/config/.gitconfig` → `~/.gitconfig`
+- `nvim/config/.config/nvim/init.lua` → `~/.config/nvim/init.lua`
 
 Three types of hooks exist, `pre.sh`, `post.sh` and `rm.sh`. Following on from the above example, if you wanted to do a
 `pre.sh` hook that installed git, before the configuration was symlinked across, then this would like like:
 
 `git/hooks/pre.sh`
+
+**Hook scripts** define functions named after OS identifiers. CAIFS detects the OS and calls the matching function:
+
+``` shell
+# git/hooks/pre.sh
+
+fedora() {
+    rootdo dnf install -y git-core
+}
+
+ubuntu() {
+    rootdo apt-get install -y git
+}
+
+arch() {
+    rootdo pacman -S --noconfirm git
+}
+
+macos() {
+    brew install git
+}
+
+linux() {
+    # Runs on any Linux after the distro-specific function
+    echo "Git installed on Linux"
+}
+
+generic() {
+    # Runs on all platforms last
+    echo "Git setup complete"
+}
+```
+
+Available function names:
+
+- Distro-specific: `fedora`, `ubuntu`, `arch`, `debian`, etc. (from `/etc/os-release` ID)
+- `linux` - any Linux system
+- `macos` - macOS/Darwin
+- `generic` - all platforms
 
 ## Usage Examples
 
@@ -101,12 +162,27 @@ caifs add git -d ~/my-personal-collection -d ~/my-work-collection
 # same as above, but using the environment variable to replace the -d|--directory option
 CAIFS_COLLECTIONS="~/my-personal-collection:~/my-work-collection" \
     caifs add git
+
+# remove symlinks for a target
+caifs rm git -d ~/my-dotfiles --links
+
+# run remove hook script
+caifs rm git -d ~/my-dotfiles --hooks
 ```
 
-## Advanced CAIFS Configuration and Usage
+## Environment Variables
 
-By default, running `caifs run <target>` will run both hooks and links for the `<target>` in the current working
-directory, defined by `$PWD`.
+| Variable            | Default | Description                                                              |
+|---------------------|---------|--------------------------------------------------------------------------|
+| `CAIFS_COLLECTIONS` | `$PWD`  | Colon-separated list of collection paths to search for targets          |
+| `CAIFS_LINK_ROOT`   | `$HOME` | Destination root for symlinks (e.g., set to `/` for system-wide configs)|
+| `CAIFS_VERBOSE`     | `1`     | Set to `0` to enable debug output                                        |
+| `CAIFS_RUN_FORCE`   | `1`     | Set to `0` to force overwrite existing files/links                       |
+| `CAIFS_RUN_LINKS`   | `0`     | Set to `1` to skip symlinking (equivalent to `--hooks`)                  |
+| `CAIFS_RUN_HOOKS`   | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                       |
+| `CAIFS_DRY_RUN`     | `1`     | Set to `0` to show what would run without making changes                 |
+
+## Advanced Configuration
 
 ### Define multiple collections
 
@@ -166,7 +242,7 @@ RUN useradd \
 # Copy over a collection, or perhaps curl one on from github
 COPY my-docker-collection /usr/local/share/my-docker-collection
 
-# install some software and add the config from a custom collection, but 
+# install some software and add the config from a custom collection, but
 # create the links at the link-root of /app/
 RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
     caifs add uv git pre-commit ruff \
@@ -174,42 +250,12 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
       -d /usr/local/share/my-docker-collection
 ```
 
-### Standard command overrides
+### Command Options
 
-Some general, more self-explanatory options
-
-#### Show more debugging information
-
-Shows debug logs and is far more verbose. Useful when things go wrong or when adding features
-
-`--verbose|-v` or `$CAIFS_VERBOSE=0`
-
-#### Remove any pre-existing links in the event of conflicts
-
-Will force CAIFS to unlink existing links, or rm standard files if they exist. Should be used with caution
-because you could lose your hard-earned configuration, before it is versioned!
-
-`--force|-f` or  `$CAIFS_RUN_FORCE=0`
-
-#### Run links only
-
-By default, CAIFS runs both links and hooks, unless specified.
-
-Run only the links component during an `add` or `rm` action. This effectively disables hooks
-
-`--links|-l` or `$CAIFS_RUN_LINKS=0`
-
-Run only the hooks component during an `add` or `rm` action. This effectively disables links
-
-`--hooks|-h` or `$CAIFS_RUN_HOOKS=0`
-
-The following is the equivalent of the default, which is to run both hooks and links
-
-`caifs add curl --hooks --links`
-
-#### Don't do anything to the filesystem
-
-A useful option when you want to see what would run, before you run it. This includes the removal of links, or files
-during a `--force` scenario. Also applies to hooks
-
-`--dry-run|-n` or  `$CAIFS_DRY_RUN=0`
+| Option            | Env Variable        | Description                                |
+|-------------------|---------------------|--------------------------------------------|
+| `--verbose`, `-v` | `CAIFS_VERBOSE=0`   | Show debug logs                            |
+| `--force`, `-f`   | `CAIFS_RUN_FORCE=0` | Remove existing links/files on conflict    |
+| `--links`, `-l`   | `CAIFS_RUN_LINKS=0` | Run only links, disable hooks              |
+| `--hooks`, `-h`   | `CAIFS_RUN_HOOKS=0` | Run only hooks, disable links              |
+| `--dry-run`, `-n` | `CAIFS_DRY_RUN=0`   | Show what would run without making changes |
