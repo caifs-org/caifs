@@ -58,24 +58,28 @@ Usage: caifs [--verbose] [--help] [--version] <command> [options] <targets...>
 Config And Installers For Software - a cross-platform dotfile manager and installer.
 
 Commands:
-  run <targets...>    Run hooks and create symlinks for targets (alias: add)
+  add <targets...>    Run hooks and create symlinks for targets (alias: run)
   rm <targets...>     Remove symlinks and run removal hooks for targets
 
-Run options:
+Add Command options:
   -d, --directory <path>  Collection directory (can be specified multiple times)
   -l, --links             Only create symlinks, skip hooks
   -h, --hooks             Only run hooks, skip symlinks
   -f, --force             Overwrite existing files/links
+  -n, --dry-run           Don't do any linking or run hooks, just print the action
+  -r, --link-root <path>  Set an alternative to $HOME as the link destination
 
-Remove options:
+Remove Command options:
   -d, --directory <path>  Collection directory (can be specified multiple times)
   -l, --links             Only remove symlinks, skip rm hooks
   -h, --hooks             Only run rm hooks, skip symlink removal
+  -n, --dry-run           Don't do any linking or run hooks, just print the action
+  -r, --link-root <path>  Set an alternative to $HOME as the link destination
 
 Global options:
-  --verbose               Enable debug output
-  --help                  Show this help message
-  --version               Show version number
+  -v, --verbose           Enable debug output
+  -h, --help              Show this help message
+  --version               Show version number and exit
 
 Environment variables:
   CAIFS_COLLECTIONS       Colon-separated list of collection paths (default: $PWD)
