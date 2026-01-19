@@ -87,7 +87,7 @@ is_root_config() {
 is_container() {
     [ -f /.dockerenv ] && return 0
     [ -f /run/.containerenv ] && return 0
-    [ -n "$container" ] && return 0
+    [ -n "$CAIFS_IN_CONTAINER" ] && return 0
     grep -qE 'docker|containerd|lxc|podman' /proc/1/cgroup 2>/dev/null && return 0
     return 1
 }
