@@ -17,4 +17,4 @@ repos:
   rev: v0.11.0
   hooks:
     - id: shellcheck
-      files: ^(src/bin/caifs|src/lib/caifslib.sh|install.sh)$
+      files: ^(caifs/config/bin/caifs|caifs/config/lib/caifslib.sh|install.sh)$

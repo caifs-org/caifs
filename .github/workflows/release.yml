@@ -33,15 +33,10 @@ jobs:
           just download-shunit
           just test
 
-      - name: Create release directory
-        run: |
-          mkdir -p dist
-          cp -r src/lib dist/
-          cp -r src/bin dist/
-
-      - name: Zip the directory
+      - name: Create a release tar
         id: release
-        run: tar -czvf release.tar.gz -C dist/ .
+        run: |
+          just create-release
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2.5.0

@@ -43,9 +43,9 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
 
 ```
 
-> [!IMPORTANT]
-> This CAIFS repo does not container installers, this is just the shell script for managing your own set of installers
-> See a curated library of scores of installers at <https://github.com/vasdee/caifs-common/>
+> [!NOTE]
+> This CAIFS repo itself is a valid caifs collection, containing a single target, caifs!
+> See a curated library of scores of more installers at <https://github.com/vasdee/caifs-common/>
 
 ## Install and Usage
 
@@ -62,6 +62,15 @@ Install globally by using env var `INSTALL_PREFIX=/usr/local/` and root privileg
 Check it's working and on your path with -
 
 `caifs --version` or `caifs --help`
+
+OR
+
+Clone the repository and install CAIFS, using CAIFS
+
+``` shell
+git clone https://github.com/vasdee/caifs/caifs.git
+./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local"
+```
 
 ## Collection Structure
 

@@ -5,8 +5,4 @@ LATEST_VERSION=$(curl -sL https://api.github.com/repos/vasdee/caifs/releases/lat
 
 curl -sL https://github.com/vasdee/caifs/releases/download/v"$LATEST_VERSION"/release.tar.gz | tar zxf -
 
-cp bin/caifs "$INSTALL_PREFIX"/bin/caifs
-cp lib/caifs-lib.sh "$INSTALL_PREFIX"/lib/caifslib.sh
-
-chmod +x "$INSTALL_PREFIX"/bin/caifs
-chmod +x "$INSTALL_PREFIX"/lib/caifslib.sh
+./caifs/config/bin/caifs add caifs -d . --link-root="$INSTALL_PREFIX"
