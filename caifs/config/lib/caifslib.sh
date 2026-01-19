@@ -175,11 +175,12 @@ create_link() {
 
     log_debug "create_link: source_file=$source_file dest_link=$dest_link force=$force"
 
-    if [ -e "$dest_link" ] && [ "$force" -ne 0 ]; then
+    # Check for existing file or symlink (including broken symlinks)
+    if { [ -e "$dest_link" ] || [ -L "$dest_link" ]; } && [ "$force" -ne 0 ]; then
         log_warn "link or file already exists for $dest_link .... skipping"
         return
     fi
-    if [ -e "$dest_link" ] && [ "$force" -eq 0 ]; then
+    if { [ -e "$dest_link" ] || [ -L "$dest_link" ]; } && [ "$force" -eq 0 ]; then
         if [ -L "$dest_link" ]; then
             log_warn "FORCE set, unlinking $dest_link"
             dry_or_exec "unlink $dest_link"
