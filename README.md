@@ -146,6 +146,7 @@ Available function names:
 - `linux` - any Linux system
 - `macos` - macOS/Darwin
 - `generic` - all platforms
+- `container` - runs when inside a container (Docker, Podman, LXC, etc.)
 
 ## Usage Examples
 
@@ -181,15 +182,16 @@ caifs rm git -d ~/my-dotfiles --hooks
 
 ## Environment Variables
 
-| Variable            | Default | Description                                                              |
-|---------------------|---------|--------------------------------------------------------------------------|
-| `CAIFS_COLLECTIONS` | `$PWD`  | Colon-separated list of collection paths to search for targets          |
-| `CAIFS_LINK_ROOT`   | `$HOME` | Destination root for symlinks (e.g., set to `/` for system-wide configs)|
-| `CAIFS_VERBOSE`     | `1`     | Set to `0` to enable debug output                                        |
-| `CAIFS_RUN_FORCE`   | `1`     | Set to `0` to force overwrite existing files/links                       |
-| `CAIFS_RUN_LINKS`   | `0`     | Set to `1` to skip symlinking (equivalent to `--hooks`)                  |
-| `CAIFS_RUN_HOOKS`   | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                       |
-| `CAIFS_DRY_RUN`     | `1`     | Set to `0` to show what would run without making changes                 |
+| Variable             | Default | Description                                                                  |
+|----------------------|---------|------------------------------------------------------------------------------|
+| `CAIFS_COLLECTIONS`  | `$PWD`  | Colon-separated list of collection paths to search for targets               |
+| `CAIFS_LINK_ROOT`    | `$HOME` | Destination root for symlinks (e.g., set to `/` for system-wide configs)     |
+| `CAIFS_VERBOSE`      | `1`     | Set to `0` to enable debug output                                            |
+| `CAIFS_RUN_FORCE`    | `1`     | Set to `0` to force overwrite existing files/links                           |
+| `CAIFS_RUN_LINKS`    | `0`     | Set to `1` to skip symlinking (equivalent to `--hooks`)                      |
+| `CAIFS_RUN_HOOKS`    | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                           |
+| `CAIFS_DRY_RUN`      | `1`     | Set to `0` to show what would run without making changes                     |
+| `CAIFS_IN_CONTAINER` | unset   | Set to any value to force container detection (triggers `container()` hooks) |
 
 ## Advanced Configuration
 

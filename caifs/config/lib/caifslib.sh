@@ -82,6 +82,16 @@ is_root_config() {
     esac
 }
 
+# Detects if running inside a container (Docker, Podman, LXC, etc.)
+# Returns 0 if in container, 1 otherwise
+is_container() {
+    [ -f /.dockerenv ] && return 0
+    [ -f /run/.containerenv ] && return 0
+    [ -n "$CAIFS_IN_CONTAINER" ] && return 0
+    grep -qE 'docker|containerd|lxc|podman' /proc/1/cgroup 2>/dev/null && return 0
+    return 1
+}
+
 # Creates symbolic links for all files under the target config directory
 # It creates the directory structure, if it doesn't exist already
 # $1: collection path
@@ -97,7 +107,7 @@ create_target_links() {
 
     # TODO - is there a solution to this that is more POSIX compliant?
     # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" -type f -printf "%P\n" ); do
+    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" ); do
 
         log_debug "Processing $target_directory/$config_file"
 
@@ -139,7 +149,7 @@ remove_target_links() {
 
     # TODO - is there a solution to this that is more POSIX compliant?
     # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" -type f -printf "%P\n" ); do
+    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" ); do
         log_debug "Found ${config_file}. Checking if link exists at $link_root/$config_file"
         if [ -L "$link_root/$config_file" ]; then
 
@@ -366,4 +376,11 @@ run_hook_functions() {
     # perhaps there's a generic install for all operating systems. Eg uv
     check_and_exec_function generic
     unset -f generic
+
+    # Run container-specific hooks for cleanup, etc.
+    if is_container; then
+        log_debug "Container environment detected"
+        check_and_exec_function container
+        unset -f container
+    fi
 }
