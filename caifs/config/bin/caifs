@@ -224,8 +224,7 @@ main() {
 
 
 # Run a specific type of hook for a given target.
-# Sandbox the hook script by copying the script and injecting the utilities module in
-# This will give access to all the OS variables and utiltities
+# The script is sourced to give access to all the caifs runtime variables.
 # $1: collection path
 # $2: target
 # $3: hook type [pre|post|rm]

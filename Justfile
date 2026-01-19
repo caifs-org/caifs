@@ -23,6 +23,9 @@ test:
     ./integration.sh
     ./unit.sh
 
+[script]
+create-release:
+    tar -czvf release.tar.gz caifs/
 
 pre-commit-install:
     pre-commit install --install-hooks
