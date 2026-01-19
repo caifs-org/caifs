@@ -426,6 +426,15 @@ cmd_status() {
             ;;
     esac
 
+    # Color codes for linked column (only if stdout is a terminal)
+    if [ -t 1 ]; then
+        GREEN='\033[0;32m'
+        RED='\033[0;31m'
+        NC='\033[0m'
+    else
+        GREEN=''; RED=''; NC=''
+    fi
+
     # Print header
     printf "%-40s %-20s %-8s %s\n" "COLLECTION" "TARGET" "LINKED" "HOOKS"
     printf "%-40s %-20s %-8s %s\n" "$(printf '%0.s-' $(seq 1 40))" "$(printf '%0.s-' $(seq 1 20))" "------" "-----"
@@ -445,12 +454,12 @@ cmd_status() {
                 # Skip if neither config nor hooks directory exists
                 [ -d "$target_dir/$CONFIG_DIR" ] || [ -d "$target_dir/$HOOKS_DIR" ] || continue
 
-                # Check linked status (pad for alignment)
+                # Check linked status (pad for alignment, color for linked column only)
                 if [ -d "$target_dir/$CONFIG_DIR" ]; then
                     if is_target_linked "$caifs_collection" "$target" "$LINK_ROOT"; then
-                        linked_status="${CHECK}       "
+                        linked_status="${GREEN}${CHECK}${NC}       "
                     else
-                        linked_status="${CROSS}       "
+                        linked_status="${RED}${CROSS}${NC}       "
                     fi
                 else
                     linked_status="${DASH}       "
@@ -463,7 +472,7 @@ cmd_status() {
                     hooks_status="${CROSS}"
                 fi
 
-                printf "%-40s %-20s %s %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
+                printf "%-40s %-20s %b %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
             done
         fi
 
