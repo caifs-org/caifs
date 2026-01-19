@@ -52,19 +52,32 @@ test_validate_path() {
 }
 
 test_is_wsl() {
-    unset WSLENV
-    #WSLENV="WT_SESSION:WT_PROFILE_ID:"
-    assertTrue "WSLENV env var should be unset" "[ -z $WSLENV ]"
-
+    CAIFS_IN_WSL=1
     is_wsl
     rc="$?"
+    #echo "rc=$rc"
     assertTrue "Test should not be in a WSL env by default" "[ $rc -ne 0  ]"
 
-    CAIFS_IN_WSL="true"
+    CAIFS_IN_WSL=0
     is_wsl
     rc="$?"
+    #echo "rc=$rc"
     assertTrue "Test should be forced to result in true using CAIFS_IN_WSL" "[ $rc -eq 0  ]"
 
+}
+
+test_is_container() {
+    CAIFS_IN_CONTAINER=1
+    is_container
+    rc="$?"
+    #echo "rc=$rc"
+    assertTrue "Test should not be in a Container env by default" "[ $rc -ne 0  ]"
+
+    CAIFS_IN_CONTAINER=0
+    is_container
+    rc="$?"
+    #echo "rc=$rc"
+    assertTrue "Test should be forced to result in true using CAIFS_IN_CONTAINER" "[ $rc -eq 0  ]"
 }
 
 # Enesure stripping the first char from a string, returns the original string, sans first char
@@ -104,7 +117,29 @@ test_replace_vars_in_string() {
 }
 
 test_config_directories() {
-    : #config_directories ""
+    VERBOSE=0
+    prefix_path="/fake/collection"
+
+    CAIFS_IN_CONTAINER=1
+    CAIFS_IN_WSL=1
+
+    config_dirs=$(config_directories "$prefix_path")
+    assertSame "Not in container or WSL should only be a single config path" "$config_dirs" "$prefix_path/config"
+
+    CAIFS_IN_CONTAINER=1
+    CAIFS_IN_WSL=0
+
+    config_dirs=$(config_directories "$prefix_path")
+
+    assertSame "Not in container, but in WSL should be wsl and config path" "$prefix_path/config_wsl $prefix_path/config" "$config_dirs"
+
+    CAIFS_IN_CONTAINER=0
+    CAIFS_IN_WSL=1
+
+    config_dirs=$(config_directories "$prefix_path")
+
+    assertSame "In container but not in WSL should be a container and config path" "$prefix_path/config_container $prefix_path/config" "$config_dirs"
+
 }
 
 test_github_latest() {
