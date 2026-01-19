@@ -1,4 +1,4 @@
-# Config And Installers For Software - CAIFS
+# Config And Installers For Software - CAIFS v(0.0.1)
 
 CAIFS is a tool to handle installing software across various unix-like operating systems. If you work with multiple
 flavours of linux, build docker containers and work with macs, then this tool will help you consistently install
@@ -42,6 +42,12 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
 ...
 
 ```
+
+## Other good reasons to use CAIFS
+
+- 100% pure POSIX compliant shell. So it should run just about everywhere
+- less than 50kb in size, so it won't take up precious space in your Docker builds
+- It has zero dependencies, besides coreutils functions such as find, `sed`, `grep`, `dirname`, `realpath`, `pathchk`...
 
 > [!NOTE]
 > This CAIFS repo itself is a valid caifs collection, containing a single target, caifs!
@@ -192,6 +198,8 @@ caifs rm git -d ~/my-dotfiles --hooks
 | `CAIFS_RUN_HOOKS`    | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                           |
 | `CAIFS_DRY_RUN`      | `1`     | Set to `0` to show what would run without making changes                     |
 | `CAIFS_IN_CONTAINER` | unset   | Set to any value to force container detection (triggers `container()` hooks) |
+| `CAIFS_IN_WSL`       | unset   | Set to any value to force WSL detection                                      |
+|                      |         |                                                                              |
 
 ## Advanced Configuration
 
@@ -201,7 +209,7 @@ The environment variable, `$CAIFS_COLLECTIONS`, can be set with multiple `:`-del
 standard `$PATH` variable. Setting this variable is the equivalent of supplying multiple `-d|--directory`
 arguments to the `caifs add|rm` command itself.
 
-Using the `-d|--directory` arguments _will_ override any `$CAIFS_COLLECTIONS` variable set, allowing you to work with a
+Using the `-d|--directory` arguments *will* override any `$CAIFS_COLLECTIONS` variable set, allowing you to work with a
 collection in isolation.
 
 ### Install to non-$HOME area
@@ -260,6 +268,19 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
       --link-root /app \
       -d /usr/local/share/my-docker-collection
 ```
+
+#### WSL or Container specific configuration
+
+Besides the standard `<target>/config` directory, CAIFS caters for WSL or Container environment specific config. To
+enable a specifc set of configuration that should only linked in a WSL environment, then provide an alternative
+directory named `<target>/config_wsl`.
+
+Similarly for container environments, provide an alternative directory named `<target>/config_container`.
+
+> [!NOTE]
+> The order of precedence for multiple config directories is `config_container/`, `config_wsl/`, `config/`.
+> This effectively allows you to prevent container specific configuration from being clobbered by similarly named configuration
+> within the main `config/` directory.
 
 ### Command Options
 

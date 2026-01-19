@@ -26,9 +26,14 @@ test:
     ./integration.sh
     ./unit.sh
 
-# Create a release tarball
 [script]
-create-release:
+[arg("patch", long="patch", value="patch")]
+[arg("minor", long="minor", value="minor")]
+[arg("major", long="major", value="major")]
+bump-version $patch="" $minor="" $major="" *args:
+    bump-my-version bump $patch $minor $major {{ args }}
+
+create-release-tar:
     tar -czvf release.tar.gz caifs/
 
 # Install pre-commit hooks

@@ -37,15 +37,92 @@ test_dry_run_or_exec() {
 }
 
 test_validate_path() {
-    VERBOSE=0
     correct_path="this/is/a/good/path"
+    bad_path="folder\subfolder\file.txt"
 
-    rc=$(validate_path "$correct_path")
+    validate_path "$correct_path"
+    rc=$?
 
-    echo "rc=$rc"
-    #assertSame "Path should be correct and return an rc of 0" "$rc" 0
+    assertSame "Path should be correct and return an rc of 0" "$rc" 0
+
+    validate_path "$bad_path"
+    rc=$?
+    assertNotSame "Path should not be valid and have returned non zero" "$rc" "0"
 
 }
 
+test_is_wsl() {
+    unset WSLENV
+    #WSLENV="WT_SESSION:WT_PROFILE_ID:"
+    assertTrue "WSLENV env var should be unset" "[ -z $WSLENV ]"
+
+    is_wsl
+    rc="$?"
+    assertTrue "Test should not be in a WSL env by default" "[ $rc -ne 0  ]"
+
+    CAIFS_IN_WSL="true"
+    is_wsl
+    rc="$?"
+    assertTrue "Test should be forced to result in true using CAIFS_IN_WSL" "[ $rc -eq 0  ]"
+
+}
+
+# Enesure stripping the first char from a string, returns the original string, sans first char
+test_strip_char() {
+
+    the_string="^hello/root/path"
+    stripped_string=$(strip_leading_char "$the_string")
+
+    assertNotSame "String should not match after string" "$the_string" "$stripped_string"
+
+    assertSame "String should match when the first ^ char is added back" "$the_string" "^$stripped_string"
+}
+
+test_replace_vars_in_string() {
+    unset VAR1 BOTTOM
+    good_string1="%VAR1%/at/top/and/%BOTTOM%/file.txt"
+
+    replace_vars_in_string
+    rc=$?
+    #echo "rc=$rc"
+    assertTrue "No supplied parameter to function should return error" "[ $rc -ne 0 ]"
+
+    replace_vars_in_string "$good_string1"
+    rc=$?
+    #echo "rc=$rc"
+    assertTrue "Vars should not be present and function should fail" "[ $rc -ne 0 ]"
+
+
+    VAR1="VAR_VALUE"
+    BOTTOM="BOTTOM_VALUE"
+    replaced_string=$(replace_vars_in_string "$good_string1")
+    rc=$?
+    #echo "rc=$rc"
+    assertTrue "Vars should be present and function should return success" "[ $rc -eq 0 ]"
+    assertSame "Vars should be expanded in the path" "$replaced_string" "VAR_VALUE/at/top/and/BOTTOM_VALUE/file.txt"
+
+}
+
+test_config_directories() {
+    : #config_directories ""
+}
+
+test_github_latest() {
+    tag=""
+    assertTrue "Tag value should be initially empty" "[ -z $tag ]"
+    tag=$(github_latest_tag "casey/just")
+
+    echo $tag
+    assertTrue "Tag value should now not be empty" "[ -n $tag ]"
+}
+
+test_gitlab_latest() {
+    tag=""
+    assertTrue "Tag value should be initially empty" "[ -z $tag ]"
+    tag=$(gitlab_latest_tag "gitlab-org%2Fcli")
+
+    echo $tag
+    assertTrue "Tag value should now not be empty" "[ -n $tag ]"
+}
 
 . ./shunit2/shunit2

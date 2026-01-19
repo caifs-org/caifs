@@ -36,10 +36,11 @@ dry_or_exec() {
 # validate that a supplied path actually resembles a path
 # $1: The path to check
 validate_path() {
-    pathchk "$1"
+    pathchk -p "$1"
     rc=$?
     if [ "$rc" -ne 0 ]; then
-        log_error "$1 does not appear to be a valid path" $rc
+        log_warn "$1 does not appear to be a valid path"
+        return 1
     fi
     return 0
 }
@@ -50,10 +51,14 @@ validate_path() {
 replace_vars_in_string() {
     path="$1"
 
+    if [ -z "$path" ]; then
+        return 1
+    fi
     for s in $(echo "$path" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
         match_value=$(eval "echo \$${s}")
         if [ -z "$match_value" ]; then
-            log_error "Value for $s is empty, exiting"
+            log_warn "Value for $s is empty"
+            return 1
         fi
         path=$(echo "$path" | sed "s|%$s%|$match_value|g")
     done
@@ -92,6 +97,29 @@ is_container() {
     return 1
 }
 
+# Detects if running inside a WSL environment
+# Returns 0 if in WSL, 1 otherwise
+is_wsl() {
+    [ -n "$WSLENV" ] && return 0
+    [ -n "$CAIFS_IN_WSL" ] && return 0
+    return 1
+}
+
+# returns a string of valid config directories for this run
+# Default will always be "config"
+# $1 a path prefix to add to the final result of each config directory
+config_directories() {
+    if [ "${1%?}" = '/' ]; then
+        path_prefix="${1%?}"
+    else
+        path_prefix="$1"
+    fi
+    config_directories="${path_prefix}/config"
+    [ "$(is_wsl)" ] && config_directories="${path_prefix}/config_wsl $config_directories"
+    [ "$(is_container)" ] && config_directories="${path_prefix}/config_container $config_directories"
+    echo "$config_directories"
+}
+
 # Creates symbolic links for all files under the target config directory
 # It creates the directory structure, if it doesn't exist already
 # $1: collection path
@@ -100,14 +128,20 @@ is_container() {
 create_target_links() {
     collection_path="$1"
     target=$2
-    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
+    #target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     link_root=$3
     require_escalation=1
     log_debug "Creating link for $*"
 
+    # if in a container or wsl environment, enable extra search directories. These specific
+    # environments take priority to the standard 'config' one, which comes last in the find
+    target_directory="$(config_directories "${collection_path}/${target}")"
+
+    log_debug "using target_directory=$target_directory"
+
     # TODO - is there a solution to this that is more POSIX compliant?
     # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" ); do
+    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
 
         log_debug "Processing $target_directory/$config_file"
 
@@ -125,10 +159,10 @@ create_target_links() {
 
         # Check if the leading config entry has a ^ then we need to escalate to root
         if [ "$(is_root_config "$config_file")" ]; then
-                link_root="/"
-                # remove the caret from the start of the string
-                dest_file=$(strip_leading_char "$config_file")
-                require_escalation=0
+            link_root="/"
+            # remove the caret from the start of the string
+            dest_file=$(strip_leading_char "$config_file")
+            require_escalation=0
         fi
 
         #validate_path "$dest_file"
@@ -144,8 +178,11 @@ remove_target_links() {
     collection_path="$1"
     target=$2
     link_root=$3
-    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     log_debug "Removing links for target=$target in collection=$collection_path"
+
+    # if in a container or wsl environment, enable extra search directories. These specific
+    # environments take priority to the standard 'config' one, which comes last in the find
+    target_directory="$(config_directories "${collection_path}/${target}")"
 
     # TODO - is there a solution to this that is more POSIX compliant?
     # shellcheck disable=SC2044
@@ -328,18 +365,19 @@ npm_uninstall() {
     npm uninstall --global "$@"
 }
 
-# Gets the latest github tag from a given repo
+# Gets the latest github tag from a given repo. By default this api appears to be pretty-printed, so use tr
+# to minify to one line for sed to parse
 # Note: this function removes any optional v prefix of the tag, which seems to be a github convention
 # $1 repo path
 github_latest_tag() {
-    curl -sL https://api.github.com/repos/"${1}"/releases/latest | jq -r | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/'
+    curl -sL https://api.github.com/repos/"${1}"/releases/latest?per_page=1 | tr -d '[:space:]' | sed -E 's/.*"tag_name":"v?([^"]+)".*/\1/'
 }
 
 # Gets the latest tag for a given gitlab repository
 # Note: this function removes any optional v prefix of the tag, which seems to be a github convention
 # $1 project name or id
 gitlab_latest_tag() {
-    curl -sL https://gitlab.com/api/v4/projects/"${1}"/releases?per_page=1 | jq -r | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/'
+    curl -sL https://gitlab.com/api/v4/projects/"${1}"/releases?per_page=1 | tr -d '[:space:]' | sed -E 's/.*"tag_name":"v?([^"]+)".*/\1/'
 }
 
 
