@@ -426,19 +426,24 @@ cmd_status() {
 
         log_debug "Checking collection: $caifs_collection"
 
-        # Find all targets (directories containing a config/ subdirectory)
+        # Find all targets (directories containing config/ or hooks/ subdirectory)
         if [ -d "$caifs_collection" ]; then
             for target_dir in "$caifs_collection"/*/; do
                 [ -d "$target_dir" ] || continue
                 target=$(basename "$target_dir")
 
-                # Skip if no config directory
-                [ -d "$target_dir/$CONFIG_DIR" ] || continue
+                # Skip if neither config nor hooks directory exists
+                [ -d "$target_dir/$CONFIG_DIR" ] || [ -d "$target_dir/$HOOKS_DIR" ] || continue
 
-                if is_target_linked "$caifs_collection" "$target" "$LINK_ROOT"; then
-                    status="yes"
+                if [ -d "$target_dir/$CONFIG_DIR" ]; then
+                    if is_target_linked "$caifs_collection" "$target" "$LINK_ROOT"; then
+                        status="yes"
+                    else
+                        status="no"
+                    fi
                 else
-                    status="no"
+                    # Hooks-only target
+                    status="-"
                 fi
 
                 printf "%-40s %-20s %s\n" "$collection_name" "$target" "$status"
