@@ -1,5 +1,7 @@
 #!/bin/sh
 
+LOCAL_CERT_DIR=~/.local/share/certificates
+
 log_debug() {
     if [ "$VERBOSE" -eq 0 ]; then
         echo "DEBUG: $*"
@@ -36,7 +38,7 @@ dry_or_exec() {
 # validate that a supplied path actually resembles a path
 # $1: The path to check
 validate_path() {
-    pathchk -p "$1"
+    pathchk -Pp "$1"
     rc=$?
     if [ "$rc" -ne 0 ]; then
         log_warn "$1 does not appear to be a valid path"
@@ -90,9 +92,15 @@ is_root_config() {
 # Detects if running inside a container (Docker, Podman, LXC, etc.)
 # Returns 0 if in container, 1 otherwise
 is_container() {
+    if [ -n "$CAIFS_IN_CONTAINER" ]; then
+        if [ "$CAIFS_IN_CONTAINER" = "0" ]; then
+            return 0
+        else
+            return 1
+        fi
+    fi
     [ -f /.dockerenv ] && return 0
     [ -f /run/.containerenv ] && return 0
-    [ -n "$CAIFS_IN_CONTAINER" ] && return 0
     grep -qE 'docker|containerd|lxc|podman' /proc/1/cgroup 2>/dev/null && return 0
     return 1
 }
@@ -100,8 +108,15 @@ is_container() {
 # Detects if running inside a WSL environment
 # Returns 0 if in WSL, 1 otherwise
 is_wsl() {
+    if [ -n "$CAIFS_IN_WSL" ]; then
+        if [ "$CAIFS_IN_WSL" = "0" ]; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+    [ -f /etc/wsl.conf ] && return 0
     [ -n "$WSLENV" ] && return 0
-    [ -n "$CAIFS_IN_WSL" ] && return 0
     return 1
 }
 
@@ -115,8 +130,9 @@ config_directories() {
         path_prefix="$1"
     fi
     config_directories="${path_prefix}/config"
-    [ "$(is_wsl)" ] && config_directories="${path_prefix}/config_wsl $config_directories"
-    [ "$(is_container)" ] && config_directories="${path_prefix}/config_container $config_directories"
+
+    is_wsl && config_directories="${path_prefix}/config_wsl $config_directories"
+    is_container && config_directories="${path_prefix}/config_container $config_directories"
     echo "$config_directories"
 }
 
@@ -393,6 +409,59 @@ gitlab_latest_tag() {
     curl -sL https://gitlab.com/api/v4/projects/"${1}"/releases?per_page=1 | tr -d '[:space:]' | sed -E 's/.*"tag_name":"v?([^"]+)".*/\1/'
 }
 
+# Installs previously linked certificiates from $LOCAL_CERT_DIR into the specific trust chain of the current OS
+install_certs() {
+    for cert in "${LOCAL_CERT_DIR}"/*; do
+        log_info "Importing CA for ${OS_TYPE}/${OS_ID}"
+        case "$OS_TYPE" in
+            Linux)
+                check_and_exec_function "${OS_ID}_cert_installer" "$cert" "$LOCAL_CERT_DIR"
+                ;;
+            Darwin)
+                check_and_exec_function "macos_cert_installer" "$cert" "$LOCAL_CERT_DIR"
+                ;;
+            *)
+                log_error "Not a support OS - ${OS_TYPE}"
+                # This is invoked directly, we can safely ignore it, as it does actually work
+                # shellcheck disable=SC2317
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# $1: cert name
+# $2: location directory of cert $1
+arch_cert_hander() {
+    rootdo cp "$2/$1" "/etc/ca-certificates/trust-source/anchors/${1}.pem"
+    rootdo update-ca-trust
+}
+
+# $1: cert name
+# $2: location directory of cert $1
+rhel_cert_handler() {
+    rootdo cp "$2/$1" "/etc/pki/ca-trust/source/anchors/${1}.pem"
+    rootdo update-ca-trust
+}
+
+# $1: cert name
+# $2: location directory of cert $1
+debian_cert_handler() {
+    rootdo cp "$2/$1" "/usr/local/share/ca-certificates/${1}.crt"
+    rootdo update-ca-certificates
+}
+
+steamos_cert_hander() {
+    arch_cert_handler "$@"
+}
+
+ubuntu_cert_handler() {
+    debian_cert_handler "$@"
+}
+
+fedora_cert_handler() {
+    rhel_cert_handler "$@"
+}
 
 # Generic install script for installing per OS_ID based on the above global
 # variables that determine cross platform OS infomation

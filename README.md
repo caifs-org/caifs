@@ -35,7 +35,7 @@ Running the equivalent in a docker file, after a bootstrap gives you consistency
 ``` Dockerfile
 FROM debian:trixie-slim
 
-RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
+RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
     caifs add curl --hooks
 
 # Your other docker image build
@@ -51,19 +51,19 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
 
 > [!NOTE]
 > This CAIFS repo itself is a valid caifs collection, containing a single target, caifs!
-> See a curated library of scores of more installers at <https://github.com/vasdee/caifs-common/>
+> See a curated library of scores of more installers at <https://github.com/caifs-org/caifs-common/>
 
 ## Install and Usage
 
 YOLO it onto your system to install locally within `~/.local/`
 
-`curl -sL https://github.com/vasdee/caifs/install.sh | sh`
+`curl -sL https://github.com/caifs-org/caifs/install.sh | sh`
 
 OR
 
 Install globally by using env var `INSTALL_PREFIX=/usr/local/` and root privileges
 
-`INSTALL_PREFIX=/usr/local/ curl -sOL https://github.com/vasdee/caifs/install.sh | sudo sh -c`
+`INSTALL_PREFIX=/usr/local/ curl -sOL https://github.com/caifs-org/caifs/install.sh | sudo sh -c`
 
 Check it's working and on your path with -
 
@@ -74,7 +74,7 @@ OR
 Clone the repository and install CAIFS, using CAIFS
 
 ``` shell
-git clone https://github.com/vasdee/caifs/caifs.git
+git clone https://github.com/caifs-org/caifs/caifs.git
 ./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local"
 ```
 
@@ -154,6 +154,28 @@ Available function names:
 - `generic` - all platforms
 - `container` - runs when inside a container (Docker, Podman, LXC, etc.)
 
+### CA trust updates
+
+It's often common in enterprise setups to require a custom certificate to be installed to maintain the certificate
+trust chain. For these scenarios, any given target should create a certificate file within the following structure:
+
+`<target>/config/.local/share/certificates/my_cert.crt`
+
+Of course, no OS updates their trust chain in the same way, so CAIFS provides a series of OS identifier wrapper
+functions to manage the various OS specific tasks to get that cert into the system wide cert trust.
+
+From a `post.sh` hook script (because we need it to run after the linking), call the `install_certs()` function, from
+either of the handlers or as a fail safe, within the more generic `linux()` handler, like so:
+
+``` shell
+# enterprise-certs/hooks/post.sh
+
+linux() {
+    install_certs
+}
+
+```
+
 ## Usage Examples
 
 ``` shell
@@ -188,18 +210,19 @@ caifs rm git -d ~/my-dotfiles --hooks
 
 ## Environment Variables
 
-| Variable             | Default | Description                                                                  |
-|----------------------|---------|------------------------------------------------------------------------------|
-| `CAIFS_COLLECTIONS`  | `$PWD`  | Colon-separated list of collection paths to search for targets               |
-| `CAIFS_LINK_ROOT`    | `$HOME` | Destination root for symlinks (e.g., set to `/` for system-wide configs)     |
-| `CAIFS_VERBOSE`      | `1`     | Set to `0` to enable debug output                                            |
-| `CAIFS_RUN_FORCE`    | `1`     | Set to `0` to force overwrite existing files/links                           |
-| `CAIFS_RUN_LINKS`    | `0`     | Set to `1` to skip symlinking (equivalent to `--hooks`)                      |
-| `CAIFS_RUN_HOOKS`    | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                           |
-| `CAIFS_DRY_RUN`      | `1`     | Set to `0` to show what would run without making changes                     |
-| `CAIFS_IN_CONTAINER` | unset   | Set to any value to force container detection (triggers `container()` hooks) |
-| `CAIFS_IN_WSL`       | unset   | Set to any value to force WSL detection                                      |
-|                      |         |                                                                              |
+| Variable             | Default | Description                                                                    |
+|----------------------|---------|--------------------------------------------------------------------------------|
+| `CAIFS_COLLECTIONS`  | `$PWD`  | Colon-separated list of collection paths to search for targets                 |
+| `CAIFS_LINK_ROOT`    | `$HOME` | Destination root for symlinks (e.g., set to `/` for system-wide configs)       |
+| `CAIFS_VERBOSE`      | `1`     | Set to `0` to enable debug output                                              |
+| `CAIFS_RUN_FORCE`    | `1`     | Set to `0` to force overwrite existing files/links                             |
+| `CAIFS_RUN_LINKS`    | `0`     | Set to `1` to skip symlinking (equivalent to `--hooks`)                        |
+| `CAIFS_RUN_HOOKS`    | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                             |
+| `CAIFS_DRY_RUN`      | `1`     | Set to `0` to show what would run without making changes                       |
+| `CAIFS_IN_CONTAINER` | unset   | Set to `0` to set container config to run + triggers `container()` hooks).     |
+|                      |         | Set to `1` to specify not in container, regardless of if in a container or not |
+| `CAIFS_IN_WSL`       | unset   | Set to `0` to set WSL config to run. Set to `1` to force to run                |
+|                      |         |                                                                                |
 
 ## Advanced Configuration
 
@@ -263,7 +286,7 @@ COPY my-docker-collection /usr/local/share/my-docker-collection
 
 # install some software and add the config from a custom collection, but
 # create the links at the link-root of /app/
-RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
+RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
     caifs add uv git pre-commit ruff \
       --link-root /app \
       -d /usr/local/share/my-docker-collection

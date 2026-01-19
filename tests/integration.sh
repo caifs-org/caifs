@@ -19,6 +19,8 @@ _touchpath() {
 
 # $1: number of collections to create [default 1]
 setUp() {
+    export CAIFS_IN_CONTAINER=1
+    export CAIFS_IN_WSL=1
     COLLECTION_BASE_DIR=$(mktemp -d)
     export CAIFS_LINK_ROOT=$(mktemp -d)
 
