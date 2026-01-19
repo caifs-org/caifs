@@ -416,6 +416,17 @@ cmd_status() {
 
     collection_paths="$CAIFS_COLLECTIONS"
 
+    # Color codes (only if stdout is a terminal)
+    if [ -t 1 ]; then
+        GREEN='\033[0;32m'
+        YELLOW='\033[0;33m'
+        NC='\033[0m' # No Color
+    else
+        GREEN=''
+        YELLOW=''
+        NC=''
+    fi
+
     # Print header
     printf "%-40s %-20s %s\n" "COLLECTION" "TARGET" "LINKED"
     printf "%-40s %-20s %s\n" "$(printf '%0.s-' $(seq 1 40))" "$(printf '%0.s-' $(seq 1 20))" "------"
@@ -437,16 +448,16 @@ cmd_status() {
 
                 if [ -d "$target_dir/$CONFIG_DIR" ]; then
                     if is_target_linked "$caifs_collection" "$target" "$LINK_ROOT"; then
-                        status="yes"
+                        status="${GREEN}yes${NC}"
                     else
-                        status="no"
+                        status="${YELLOW}no${NC}"
                     fi
                 else
                     # Hooks-only target
                     status="-"
                 fi
 
-                printf "%-40s %-20s %s\n" "$collection_name" "$target" "$status"
+                printf "%-40s %-20s %b\n" "$collection_name" "$target" "$status"
             done
         fi
 

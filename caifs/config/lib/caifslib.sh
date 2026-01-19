@@ -239,9 +239,8 @@ has() {
 # A wrapper to the `has` function to exit if the command is not found
 # $1 name or path to executable
 has_or_exit() {
-    rc=$(has "$@")
-    if [ "$rc" -ne 0 ]; then
-        exit "$rc"
+    if ! has "$@"; then
+        exit 1
     fi
 }
 
@@ -285,6 +284,20 @@ rootdo() {
     fi
 }
 
+# Install packages via yay (AUR helper) without confirmation
+# Arch being a rolling distro the concept of package versions are not really a thing
+# $@ packages to install
+yay_install() {
+    has_or_exit yay
+    yay -S --needed --noconfirm "$@"
+}
+
+# Uninstall packages via yay without confirmation
+# $@ packages to uninstall
+yay_uninstall() {
+    has_or_exit yay
+    yay -Rns --noconfirm "$@"
+}
 
 # This helper function can be used for installing tools via uv
 # If a corresponding env var of the form $<PACKAGE NAME>_VERSION exists, then this is assumed to be
