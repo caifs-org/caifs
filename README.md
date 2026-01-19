@@ -35,7 +35,7 @@ Running the equivalent in a docker file, after a bootstrap gives you consistency
 ``` Dockerfile
 FROM debian:trixie-slim
 
-RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
+RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
     caifs add curl --hooks
 
 # Your other docker image build
@@ -51,19 +51,19 @@ RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
 
 > [!NOTE]
 > This CAIFS repo itself is a valid caifs collection, containing a single target, caifs!
-> See a curated library of scores of more installers at <https://github.com/vasdee/caifs-common/>
+> See a curated library of scores of more installers at <https://github.com/caifs-org/caifs-common/>
 
 ## Install and Usage
 
 YOLO it onto your system to install locally within `~/.local/`
 
-`curl -sL https://github.com/vasdee/caifs/install.sh | sh`
+`curl -sL https://github.com/caifs-org/caifs/install.sh | sh`
 
 OR
 
 Install globally by using env var `INSTALL_PREFIX=/usr/local/` and root privileges
 
-`INSTALL_PREFIX=/usr/local/ curl -sOL https://github.com/vasdee/caifs/install.sh | sudo sh -c`
+`INSTALL_PREFIX=/usr/local/ curl -sOL https://github.com/caifs-org/caifs/install.sh | sudo sh -c`
 
 Check it's working and on your path with -
 
@@ -74,7 +74,7 @@ OR
 Clone the repository and install CAIFS, using CAIFS
 
 ``` shell
-git clone https://github.com/vasdee/caifs/caifs.git
+git clone https://github.com/caifs-org/caifs/caifs.git
 ./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local"
 ```
 
@@ -286,7 +286,7 @@ COPY my-docker-collection /usr/local/share/my-docker-collection
 
 # install some software and add the config from a custom collection, but
 # create the links at the link-root of /app/
-RUN curl -sL https://github.com/vasdee/caifs/install.sh | sh && \
+RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
     caifs add uv git pre-commit ruff \
       --link-root /app \
       -d /usr/local/share/my-docker-collection
