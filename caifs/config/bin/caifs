@@ -416,20 +416,19 @@ cmd_status() {
 
     collection_paths="$CAIFS_COLLECTIONS"
 
-    # Color codes (only if stdout is a terminal)
-    if [ -t 1 ]; then
-        GREEN='\033[0;32m'
-        YELLOW='\033[0;33m'
-        NC='\033[0m' # No Color
-    else
-        GREEN=''
-        YELLOW=''
-        NC=''
-    fi
+    # Detect unicode support, fallback to ASCII
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *UTF-8*|*utf8*)
+            CHECK="✓"; CROSS="✗"; DASH="-"
+            ;;
+        *)
+            CHECK="Y"; CROSS="N"; DASH="-"
+            ;;
+    esac
 
     # Print header
-    printf "%-40s %-20s %s\n" "COLLECTION" "TARGET" "LINKED"
-    printf "%-40s %-20s %s\n" "$(printf '%0.s-' $(seq 1 40))" "$(printf '%0.s-' $(seq 1 20))" "------"
+    printf "%-40s %-20s %-8s %s\n" "COLLECTION" "TARGET" "LINKED" "HOOKS"
+    printf "%-40s %-20s %-8s %s\n" "$(printf '%0.s-' $(seq 1 40))" "$(printf '%0.s-' $(seq 1 20))" "------" "-----"
 
     while [ -n "$collection_paths" ]; do
         caifs_collection="${collection_paths%%:*}"
@@ -446,18 +445,25 @@ cmd_status() {
                 # Skip if neither config nor hooks directory exists
                 [ -d "$target_dir/$CONFIG_DIR" ] || [ -d "$target_dir/$HOOKS_DIR" ] || continue
 
+                # Check linked status (pad for alignment)
                 if [ -d "$target_dir/$CONFIG_DIR" ]; then
                     if is_target_linked "$caifs_collection" "$target" "$LINK_ROOT"; then
-                        status="${GREEN}yes${NC}"
+                        linked_status="${CHECK}       "
                     else
-                        status="${YELLOW}no${NC}"
+                        linked_status="${CROSS}       "
                     fi
                 else
-                    # Hooks-only target
-                    status="-"
+                    linked_status="${DASH}       "
                 fi
 
-                printf "%-40s %-20s %b\n" "$collection_name" "$target" "$status"
+                # Check hooks status (has hooks/*.sh files)
+                if [ -d "$target_dir/$HOOKS_DIR" ] && ls "$target_dir/$HOOKS_DIR"/*.sh >/dev/null 2>&1; then
+                    hooks_status="${CHECK}"
+                else
+                    hooks_status="${CROSS}"
+                fi
+
+                printf "%-40s %-20s %s %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
             done
         fi
 
