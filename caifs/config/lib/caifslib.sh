@@ -25,13 +25,21 @@ log_error() {
 ##
 ## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
 # By default, run both links and hooks
+# shellcheck disable=SC2034
 VERSION=1.0.0
+
+HOOKS_DIR=hooks
 
 # Local directory for linking certificates into
 LOCAL_CERT_DIR=~/.local/share/certificates
 
 # Force the override of existing link targets
 RUN_FORCE=${CAIFS_RUN_FORCE:-1}
+
+# Whether to run links and/or hooks. Defaults to true (0) for both
+RUN_LINKS=${CAIFS_RUN_LINKS:-0}
+RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
+RUN_TARGETS=""
 
 # Multiple targets could be specified. We will run them in order
 VERBOSE=${CAIFS_VERBOSE:=1}
@@ -66,6 +74,54 @@ elif [ "${OS_TYPE}" = "Darwin" ]; then
 else
     log_error "Unsupported Operating System - $OS_TYPE"
 fi
+
+set_collection_paths() {
+    CAIFS_COLLECTIONS=$1
+}
+get_collection_paths() {
+    echo "$CAIFS_COLLECTIONS"
+}
+
+set_run_hooks() {
+    RUN_HOOKS=${1}
+}
+
+set_run_links() {
+    RUN_LINKS=${1}
+}
+
+set_dry_run() {
+    DRY_RUN=${1}
+}
+
+set_link_root() {
+    LINK_ROOT=${1}
+}
+
+get_link_root() {
+    echo "$LINK_ROOT"
+}
+
+set_force() {
+    RUN_FORCE=${1}
+}
+
+# Enables (0) or disables (1) the debugging logs
+# $1 - status 0|1 default 1
+set_verbose() {
+    RUN_FORCE=${1}
+}
+
+set_run_targets() {
+    if [ -z "$1" ]; then
+        log_error "At least one target is required!"
+    fi
+    RUN_TARGETS=$1
+}
+
+get_run_targets() {
+    echo "$RUN_TARGETS"
+}
 
 # Runs a command, if the DRY_RUN setting is not in effect
 dry_or_exec() {
@@ -226,6 +282,63 @@ config_directories() {
     echo "$config_directories"
 }
 
+# Run a specific type of hook for a given target.
+# The script is sourced to give access to all the caifs runtime variables.
+# $1: collection path
+# $2: target
+# $3: hook type [pre|post|rm]
+run_hook() {
+    collection_path="$1"
+    target=$2
+    hook_type=$3
+
+    if [ "$RUN_HOOKS" -ne 0 ]; then
+        log_debug "Not running ${hook_type}-hook for target '$target' in collection $collection_path"
+        return 0
+    fi
+
+    log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+
+    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
+        TMP_DIR=$(mktemp -d)
+        cd "${TMP_DIR}" || exit
+
+        # shellcheck disable=SC1090
+        # import the hook script functions
+        . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
+
+        run_hook_functions
+
+        cd - || exit
+        rm -rf "${TMP_DIR}"
+    else
+        log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
+    fi
+
+}
+
+# A wrapper to specifically run a remove hook
+# $1: collection path
+# $2: The target name to run the hook for
+run_remove_hook() {
+    run_hook "$@" "rm"
+}
+
+# A wrapper to specifically run a pre hook
+# $1: collection path
+# $2: The target name to run the hook for
+run_pre_hook() {
+    run_hook "$@" "pre"
+}
+
+# A wrapper to specifically run a post hook
+# $1: collection path
+# $2: The target name to run the hook for
+run_post_hook() {
+    run_hook "$@" "post"
+}
+
+
 # Check if a target has any linked files
 # $1: collection path
 # $2: target name
@@ -271,6 +384,12 @@ create_target_links() {
     #target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     link_root=$3
     require_escalation=1
+
+    if [ "$RUN_LINKS" -ne 0 ]; then
+        log_debug "Not running links as it is disabled RUN_LINKS=$RUN_LINKS"
+        return 0
+    fi
+
     log_debug "Creating link for $*"
 
     # if in a container or wsl environment, enable extra search directories. These specific
@@ -319,6 +438,11 @@ remove_target_links() {
     target=$2
     link_root=$3
     log_debug "Removing links for target=$target in collection=$collection_path"
+
+    if [ "$RUN_LINKS" -ne 0 ]; then
+        log_debug "Not running remove_target_links as it is disabled RUN_LINKS=$RUN_LINKS"
+        return 0
+    fi
 
     # if in a container or wsl environment, enable extra search directories. These specific
     # environments take priority to the standard 'config' one, which comes last in the find
