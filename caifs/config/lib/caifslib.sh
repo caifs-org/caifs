@@ -109,7 +109,7 @@ set_force() {
 # Enables (0) or disables (1) the debugging logs
 # $1 - status 0|1 default 1
 set_verbose() {
-    RUN_FORCE=${1}
+    VERBOSE=${1}
 }
 
 set_run_targets() {
@@ -390,42 +390,42 @@ create_target_links() {
         return 0
     fi
 
-    log_debug "Creating link for $*"
-
     # if in a container or wsl environment, enable extra search directories. These specific
     # environments take priority to the standard 'config' one, which comes last in the find
     target_directory="$(config_directories "${collection_path}/${target}")"
 
     log_debug "using target_directory=$target_directory"
 
-    # TODO - is there a solution to this that is more POSIX compliant?
-    # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+    for config_dir in $target_directory; do
+        # TODO - is there a solution to this that is more POSIX compliant?
+        # shellcheck disable=SC2044
+        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
 
-        log_debug "Processing $target_directory/$config_file"
+            log_debug "Processing $config_dir/$config_file"
 
-        #dest_file=$(replace_vars_in_string "$config_file")
-        # replace any variable place holders in the relative path, to form a destination path
-        # TODO: This should call replace_vars_in_string but the exiting doesn't work well
-        dest_file=$config_file
-        for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
-            match_value=$(eval "echo \$${s}")
-            if [ -z "$match_value" ]; then
-                log_error "Value for $s is empty, exiting"
+            #dest_file=$(replace_vars_in_string "$config_file")
+            # replace any variable place holders in the relative path, to form a destination path
+            # TODO: This should call replace_vars_in_string but the exiting doesn't work well
+            dest_file=$config_file
+            for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
+                match_value=$(eval "echo \$${s}")
+                if [ -z "$match_value" ]; then
+                    log_error "Value for $s is empty, exiting"
+                fi
+                dest_file=$(echo "$dest_file" | sed "s|%$s%|$match_value|g")
+            done
+
+            # Check if the leading config entry has a ^ then we need to escalate to root
+            if [ "$(is_root_config "$config_file")" ]; then
+                link_root="/"
+                # remove the caret from the start of the string
+                dest_file=$(strip_leading_char "$config_file")
+                require_escalation=0
             fi
-            dest_file=$(echo "$dest_file" | sed "s|%$s%|$match_value|g")
+
+            #validate_path "$dest_file"
+            create_link "$config_dir/$config_file" "$link_root/$dest_file" "$require_escalation" "$RUN_FORCE"
         done
-
-        # Check if the leading config entry has a ^ then we need to escalate to root
-        if [ "$(is_root_config "$config_file")" ]; then
-            link_root="/"
-            # remove the caret from the start of the string
-            dest_file=$(strip_leading_char "$config_file")
-            require_escalation=0
-        fi
-
-        #validate_path "$dest_file"
-        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$require_escalation" "$RUN_FORCE"
     done
 }
 
@@ -450,17 +450,19 @@ remove_target_links() {
 
     # TODO - is there a solution to this that is more POSIX compliant?
     # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" ); do
-        log_debug "Found ${config_file}. Checking if link exists at $link_root/$config_file"
-        if [ -L "$link_root/$config_file" ]; then
+    for config_dir in $target_directory; do
+        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+            log_debug "Found ${config_dir}/${config_file}. Checking if link exists at $link_root/$config_file"
+            if [ -L "$link_root/$config_file" ]; then
 
-            unlink_cmd="unlink $link_root/$config_file"
-            if [ "$(is_root_config "$config_file")" ]; then
-                link_root="/"
-                unlink_cmd="rootdo $unlink_cmd"
+                unlink_cmd="unlink $link_root/${config_file}"
+                if [ "$(is_root_config "$config_file")" ]; then
+                    link_root="/"
+                    unlink_cmd="rootdo $unlink_cmd"
+                fi
+                dry_or_exec "$unlink_cmd"
             fi
-            dry_or_exec "$unlink_cmd"
-        fi
+        done
     done
 }
 
@@ -513,7 +515,9 @@ create_link() {
 
 # strips the leading character for a string and returns the original string, sans first character
 # $1: The string
+# $2: The optional charactor to strip if present default ^
 strip_leading_char() {
+    char=${2:-'^'}
     echo "${1#?}"
 }
 
@@ -613,8 +617,11 @@ uv_install() {
     PACKAGE=$1
     shift 1
 
+    log_debug "Attempting to install $PACKAGE"
+
     PACKAGE_VERSION=$(version_from_env "$PACKAGE")
     if [ -n "$PACKAGE_VERSION" ]; then
+        log_debug "Found ${PACKAGE}_VERSION=$PACKAGE_VERSION"
         PACKAGE="$PACKAGE==$PACKAGE_VERSION"
     fi
     uv tool install --upgrade "$PACKAGE $*"
