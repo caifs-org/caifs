@@ -1,7 +1,5 @@
 #!/bin/sh
 
-LOCAL_CERT_DIR=~/.local/share/certificates
-
 log_debug() {
     if [ "$VERBOSE" -eq 0 ]; then
         echo "DEBUG: $*"
@@ -23,6 +21,51 @@ log_error() {
     echo "ERROR: $1"
     exit "$rc"
 }
+
+##
+## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
+# By default, run both links and hooks
+VERSION=1.0.0
+
+# Local directory for linking certificates into
+LOCAL_CERT_DIR=~/.local/share/certificates
+
+# Force the override of existing link targets
+RUN_FORCE=${CAIFS_RUN_FORCE:-1}
+
+# Multiple targets could be specified. We will run them in order
+VERBOSE=${CAIFS_VERBOSE:=1}
+DRY_RUN=${CAIFS_DRY_RUN:-1}
+
+# A list of directories to interogate for caifs collections
+CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
+
+# The root directory of where config should link to. By default it should be home, but for root scenarios
+# this can be overridden
+LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
+
+# Source the OS type and export the most useful for being available in executed scripts
+export OS_TYPE=
+OS_TYPE="$(uname -s)"
+
+export OS_ID=""
+export OS_VERSION_ID=""
+
+export OS_ARCH=
+OS_ARCH="$(uname -m)"
+
+if [ "${OS_TYPE}" = "Linux" ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    OS_ID=${ID}
+    OS_VERSION_ID=${VERSION_ID}
+
+elif [ "${OS_TYPE}" = "Darwin" ]; then
+    OS_ID=$(sw_vers -productName)
+    OS_VERSION_ID=$(sw_vers -productVersion)
+else
+    log_error "Unsupported Operating System - $OS_TYPE"
+fi
 
 # Runs a command, if the DRY_RUN setting is not in effect
 dry_or_exec() {
@@ -80,7 +123,11 @@ is_root_config() {
 
     case "$path" in
         ^*)
-            log_debug "$path is designated for root"
+            log_debug "$path is designated for root via leading ^"
+            return 0
+            ;;
+        /*)
+            log_debug "$path is designated for root via leading /"
             return 0
             ;;
         *)
@@ -120,20 +167,97 @@ is_wsl() {
     return 1
 }
 
-# returns a string of valid config directories for this run
-# Default will always be "config"
-# $1 a path prefix to add to the final result of each config directory
-config_directories() {
-    if [ "${1%?}" = '/' ]; then
+# strips a trail character from the supplied string, returning the string, sans character
+# $1: the string to strip
+# $2: optional character, default '/'
+strip_trailing() {
+    char=${2:-"/"}
+
+    if [ "${1%?}" = "$char" ]; then
         path_prefix="${1%?}"
     else
         path_prefix="$1"
     fi
+    echo "$path_prefix"
+}
+
+# Returns true 0 or false 1 depending if 1 or more hook scripts are present
+# $1: target_dir to check for hooks/ directory
+has_hooks() {
+    target_dir=$1
+    if [ -d "$target_dir/hooks" ]; then
+        if [ -f "$target_dir/hooks/pre.sh" ] \
+           || [ -f "$target_dir/hooks/post.sh" ] \
+           || [ -f "$target_dir/hooks/rm.sh" ]
+        then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Returns true 0 or false 1 depending if 1 or more config files are present
+# $1: target_dir to check for config*/ directory
+has_config() {
+    target_dir=$1
+    find "$target_dir/"config* -type f 2>/dev/null | grep -q .
+    return $?
+}
+
+# Returns true 0 or false 1 depending on whether the supplied target_dir is valid for caifs
+# $1: target_dir to check
+is_valid_caifs_structure() {
+    if has_hooks "$1" || has_config "$1"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# returns a string of valid config directories for this run
+# Default will always be "config"
+# $1 a path prefix to add to the final result of each config directory
+config_directories() {
+    path_prefix=$(strip_trailing "$1")
     config_directories="${path_prefix}/config"
 
     is_wsl && config_directories="${path_prefix}/config_wsl $config_directories"
     is_container && config_directories="${path_prefix}/config_container $config_directories"
     echo "$config_directories"
+}
+
+# Check if a target has any linked files
+# $1: collection path
+# $2: target name
+# $3: link root
+# Returns 0 if linked, 1 if not
+is_target_linked() {
+    collection_path="$1"
+    target="$2"
+    link_root="$3"
+
+    target_directory="$(config_directories "${collection_path}/${target}")"
+    log_debug "using target_directory=$target_directory"
+
+    # TODO - is there a solution to this that is more POSIX compliant?
+    for config_dir in $target_directory; do
+        # shellcheck disable=SC2044,SC2086
+        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+            dest_link="$link_root/$config_file"
+            src_config_file="$config_dir/$config_file"
+            log_debug "Checking if dest_link=$dest_link is linked to $src_config_file"
+
+            if [ -L "$dest_link" ]; then
+                # Verify the symlink points to our target
+                link_target=$(readlink "$dest_link")
+                if [ $link_target = $src_config_file ]; then
+                    log_debug "$src_config_file is -> $link_target"
+                    return 0
+                fi
+            fi
+        done
+    done
+    return 1
 }
 
 # Creates symbolic links for all files under the target config directory
@@ -246,7 +370,11 @@ create_link() {
     basedir=$(dirname "$dest_link")
     if [ ! -d "$basedir" ]; then
         log_debug "Creating directory structure at $basedir"
-        dry_or_exec "mkdir -p $basedir"
+        mkdir_cmd="mkdir -p $basedir"
+        if [ "$require_escalation" -eq 0 ]; then
+            mkdir_cmd="rootdo $mkdir_cmd"
+        fi
+        dry_or_exec "$mkdir_cmd"
     fi
 
     link_cmd="ln -s $source_file $dest_link"
@@ -461,6 +589,27 @@ ubuntu_cert_handler() {
 
 fedora_cert_handler() {
     rhel_cert_handler "$@"
+}
+
+# A utility that allows installing software from a hook script, with respect to the LINK_ROOT
+# It performs root escalation, if the current LINK_ROOT is anchored at /
+# Files will be copied recurisvely to the LINK_ROOT destination, so $1 path should be in required order
+# $1: Path to install
+# $2: Optional extra directory, useful for the LINK_ROOT=$HOME use case. Defaults to .local
+caifs_install() {
+    link_root_home=${2:-".local"}
+
+    # If the intended LINK_ROOT starts with / then we escalate privileges
+    if is_root_config "$LINK_ROOT"; then
+        log_debug "Link root appears to reference / - escalating privileges for copy"
+        dry_or_exec rootdo cp -r "$1" "$LINK_ROOT/"
+    elif [ "$LINK_ROOT" = "$HOME" ]; then
+        log_debug "Loot root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
+        dry_or_exec cp -r "$1" "$LINK_ROOT/$link_root_home/"
+    else
+        # respect LINK_ROOT,but it appears to not need privileges
+        dry_or_exec cp -r "$1" "$LINK_ROOT/"
+    fi
 }
 
 # Generic install script for installing per OS_ID based on the above global
