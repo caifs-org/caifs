@@ -126,9 +126,44 @@ test_root_config_file_create() {
 test_root_config_file_unlink() {
     export CAIFS_VERBOSE=0
     export CAIFS_DRY_RUN=1
-    
+
 }
 
+# Test that wildcard expands to all targets in a collection
+test_wildcard_add_all_targets() {
+    caifs add '*' -d $COLLECTION_BASE_DIR/dummy_0 --links
+
+    assertTrue ".gitconfig should be linked" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+    assertTrue ".bashrc should be linked" "[ -L $CAIFS_LINK_ROOT/.bashrc ]"
+}
+
+# Test that wildcard removes all targets
+test_wildcard_rm_all_targets() {
+    caifs add '*' -d $COLLECTION_BASE_DIR/dummy_0 --links
+    caifs rm '*' -d $COLLECTION_BASE_DIR/dummy_0 --links
+
+    assertTrue ".gitconfig should not be linked" "[ ! -L $CAIFS_LINK_ROOT/.gitconfig ]"
+    assertTrue ".bashrc should not be linked" "[ ! -L $CAIFS_LINK_ROOT/.bashrc ]"
+}
+
+# Test deduplication across multiple collections
+test_wildcard_deduplicates_targets() {
+    # Both dummy_0 and dummy_1 have 'git' target
+    caifs add '*' -d $COLLECTION_BASE_DIR/dummy_0 -d $COLLECTION_BASE_DIR/dummy_1 --links
+
+    # Should only link once (first collection wins)
+    assertTrue ".gitconfig should be linked" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+}
+
+# Test that invalid directories are skipped
+test_wildcard_skips_invalid_targets() {
+    mkdir -p $COLLECTION_BASE_DIR/dummy_0/invalid_target  # No config/ or hooks/
+
+    caifs add '*' -d $COLLECTION_BASE_DIR/dummy_0 --links
+
+    # Valid targets still work
+    assertTrue ".gitconfig should be linked" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+}
 
 
 . ./shunit2/shunit2
