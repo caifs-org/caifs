@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=all
 
 oneTimeSetUp() {
     #export CAIFS_VERBOSE=0
@@ -43,6 +44,8 @@ setUp() {
 tearDown() {
     rm -rf $TMPDIR $CAIFS_LINK_ROOT
     unset CAIFS_LINK_ROOT
+    unset CAIFS_VERBOSE
+    unset CAIFS_DRY_RUN
 }
 
 testFilesExists() {
@@ -78,7 +81,7 @@ testMultipleCollections() {
     assertTrue "Private gitconfig should exist from the dummy_0 root" "[ -f $CAIFS_LINK_ROOT/.gitconfig-private ]"
 }
 
-testEnvVarInConfigPathMissing() {
+test_var_config_path_missing() {
     path_with_env=$COLLECTION_BASE_DIR/dummy_1/editorconfig/config/%CODE_DIR%/.editorconfig
     _touchpath $path_with_env
     assertTrue "$path_with_env should exist on the file system" "[ -f $path_with_env ]"
@@ -87,10 +90,10 @@ testEnvVarInConfigPathMissing() {
 
     caifs add editorconfig -d $COLLECTION_BASE_DIR/dummy_1 --links
     rc=$?
-    assertTrue "caifs should fail with missing env var" "[ $rc -ne 0 ]"
+    assertTrue "caifs should not fail with missing env var" "[ $rc -eq 0 ]"
 }
 
-testEnvVarInConfigPathVarSet() {
+test_var_config_path_set() {
     path_with_env=$COLLECTION_BASE_DIR/dummy_1/editorconfig/config/.test/%CODE_DIR%/.editorconfig
     # Don't use ~ here, because we are in temp dirs. CAIFS_LINK_ROOT is the target
     export CODE_DIR="code/private"
@@ -106,12 +109,24 @@ testEnvVarInConfigPathVarSet() {
     assertTrue ".editorconfig should exist at $CAIFS_LINK_ROOT/code" "[ -f $CAIFS_LINK_ROOT/.test/code/private/.editorconfig ]"
 }
 
+# This test doesn't do anything really. It's a visual match until I can figure out chroot
 test_root_config_file_create() {
     echo "need to add this test"
+    export CAIFS_VERBOSE=0
+    export CAIFS_DRY_RUN=1
+
+    path_with_caret=$COLLECTION_BASE_DIR/dummy_1/my-sudoers/config/^etc/sudoers.d/test.conf
+    _touchpath $path_with_caret
+    assertTrue "$path_with_caret should exist on the file system" "[ -f $path_with_caret ]"
+
+    caifs add my-sudoers -d $COLLECTION_BASE_DIR/dummy_1 --links --dry-run
 }
 
+# Test that the ^ linking is working
 test_root_config_file_unlink() {
-    echo "need to add this test"
+    export CAIFS_VERBOSE=0
+    export CAIFS_DRY_RUN=1
+    
 }
 
 

@@ -1,17 +1,20 @@
 #!/bin/sh
 
-LOCAL_CERT_DIR=~/.local/share/certificates
-
+# Log debug to standard error, so we can use debug logging in functions, without impacting
+# the stdout returns
 log_debug() {
     if [ "$VERBOSE" -eq 0 ]; then
-        echo "DEBUG: $*"
+        echo "DEBUG: $*" >&2
     fi
 }
 
+# For general information that is useful for the user to see
 log_info() {
     echo "INFO: $*"
 }
 
+# Information that is unexpected, but acknowledged and catered for
+# eg file conflicts
 log_warn() {
     echo "WARN: $*"
 }
@@ -22,6 +25,108 @@ log_error() {
     rc=${2:-1}
     echo "ERROR: $1"
     exit "$rc"
+}
+
+##
+## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
+# By default, run both links and hooks
+# shellcheck disable=SC2034
+VERSION=1.0.0
+
+HOOKS_DIR=hooks
+
+# Local directory for linking certificates into
+LOCAL_CERT_DIR=~/.local/share/certificates
+#LOCAL_COLLECTION_DIR=~/.local/share/caifs-collections
+
+# Force the override of existing link targets
+RUN_FORCE=${CAIFS_RUN_FORCE:-1}
+
+# Whether to run links and/or hooks. Defaults to true (0) for both
+RUN_LINKS=${CAIFS_RUN_LINKS:-0}
+RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
+RUN_TARGETS=""
+
+# Multiple targets could be specified. We will run them in order
+VERBOSE=${CAIFS_VERBOSE:=1}
+DRY_RUN=${CAIFS_DRY_RUN:-1}
+
+# A list of directories to interogate for caifs collections
+CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
+
+# The root directory of where config should link to. By default it should be home, but for root scenarios
+# this can be overridden
+LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
+
+# Source the OS type and export the most useful for being available in executed scripts
+export OS_TYPE=
+OS_TYPE="$(uname -s)"
+
+export OS_ID=""
+export OS_VERSION_ID=""
+
+export OS_ARCH=
+OS_ARCH="$(uname -m)"
+
+if [ "${OS_TYPE}" = "Linux" ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    OS_ID=${ID}
+    OS_VERSION_ID=${VERSION_ID}
+
+elif [ "${OS_TYPE}" = "Darwin" ]; then
+    OS_ID=$(sw_vers -productName)
+    OS_VERSION_ID=$(sw_vers -productVersion)
+else
+    log_error "Unsupported Operating System - $OS_TYPE"
+fi
+
+set_collection_paths() {
+    CAIFS_COLLECTIONS=$1
+}
+get_collection_paths() {
+    echo "$CAIFS_COLLECTIONS"
+}
+
+set_run_hooks() {
+    RUN_HOOKS=${1}
+}
+
+set_run_links() {
+    RUN_LINKS=${1}
+}
+
+set_dry_run() {
+    DRY_RUN=${1}
+}
+
+set_link_root() {
+    LINK_ROOT=${1}
+}
+
+get_link_root() {
+    echo "$LINK_ROOT"
+}
+
+set_force() {
+    RUN_FORCE=${1}
+}
+
+# Enables (0) or disables (1) the debugging logs
+# $1 - status 0|1 default 1
+set_verbose() {
+    VERBOSE=${1}
+}
+
+set_run_targets() {
+    if [ -z "$1" ]; then
+        log_error "At least one target is required!"
+    fi
+    RUN_TARGETS=$1
+}
+
+get_run_targets() {
+    echo "$RUN_TARGETS"
 }
 
 # Runs a command, if the DRY_RUN setting is not in effect
@@ -59,7 +164,7 @@ replace_vars_in_string() {
     for s in $(echo "$path" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
         match_value=$(eval "echo \$${s}")
         if [ -z "$match_value" ]; then
-            log_warn "Value for $s is empty"
+            log_debug "Value for $s is empty"
             return 1
         fi
         path=$(echo "$path" | sed "s|%$s%|$match_value|g")
@@ -80,7 +185,11 @@ is_root_config() {
 
     case "$path" in
         ^*)
-            log_debug "$path is designated for root"
+            log_debug "$path is designated for root via leading ^"
+            return 0
+            ;;
+        /*)
+            log_debug "$path is designated for root via leading /"
             return 0
             ;;
         *)
@@ -120,20 +229,156 @@ is_wsl() {
     return 1
 }
 
+# strips a trail character from the supplied string, returning the string, sans character
+# $1: the string to strip
+# $2: optional character, default '/'
+strip_trailing() {
+    char=${2:-"/"}
+    echo "${1%"$char"}"
+}
+
+# strips the leading character for a string and returns the original string, sans first character
+# $1: The string
+# $2: The optional charactor to strip if present default ^
+strip_leading_char() {
+    char=${2:-'^'}
+    echo "${1#"$char"}"
+}
+
+# Returns true 0 or false 1 depending if 1 or more hook scripts are present
+# $1: target_dir to check for hooks/ directory
+has_hooks() {
+    target_dir=$1
+    if [ -d "$target_dir/hooks" ]; then
+        if [ -f "$target_dir/hooks/pre.sh" ] \
+           || [ -f "$target_dir/hooks/post.sh" ] \
+           || [ -f "$target_dir/hooks/rm.sh" ]
+        then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Returns true 0 or false 1 depending if 1 or more config files are present
+# $1: target_dir to check for config*/ directory
+has_config() {
+    target_dir=$1
+    find "$target_dir/"config* -type f 2>/dev/null | grep -q .
+    return $?
+}
+
+# Returns true 0 or false 1 depending on whether the supplied target_dir is valid for caifs
+# $1: target_dir to check
+is_valid_caifs_structure() {
+    if has_hooks "$1" || has_config "$1"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # returns a string of valid config directories for this run
 # Default will always be "config"
 # $1 a path prefix to add to the final result of each config directory
 config_directories() {
-    if [ "${1%?}" = '/' ]; then
-        path_prefix="${1%?}"
-    else
-        path_prefix="$1"
-    fi
+    path_prefix=$(strip_trailing "$1")
     config_directories="${path_prefix}/config"
 
     is_wsl && config_directories="${path_prefix}/config_wsl $config_directories"
     is_container && config_directories="${path_prefix}/config_container $config_directories"
     echo "$config_directories"
+}
+
+# Run a specific type of hook for a given target.
+# The script is sourced to give access to all the caifs runtime variables.
+# $1: collection path
+# $2: target
+# $3: hook type [pre|post|rm]
+run_hook() {
+    collection_path="$1"
+    target=$2
+    hook_type=$3
+
+    if [ "$RUN_HOOKS" -ne 0 ]; then
+        log_debug "Not running ${hook_type}-hook for target '$target' in collection $collection_path"
+        return 0
+    fi
+
+    log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+
+    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
+        TMP_DIR=$(mktemp -d)
+        cd "${TMP_DIR}" || exit
+
+        # shellcheck disable=SC1090
+        # import the hook script functions
+        . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
+
+        run_hook_functions
+
+        cd - || exit
+        rm -rf "${TMP_DIR}"
+    else
+        log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
+    fi
+
+}
+
+# A wrapper to specifically run a remove hook
+# $1: collection path
+# $2: The target name to run the hook for
+run_remove_hook() {
+    run_hook "$@" "rm"
+}
+
+# A wrapper to specifically run a pre hook
+# $1: collection path
+# $2: The target name to run the hook for
+run_pre_hook() {
+    run_hook "$@" "pre"
+}
+
+# A wrapper to specifically run a post hook
+# $1: collection path
+# $2: The target name to run the hook for
+run_post_hook() {
+    run_hook "$@" "post"
+}
+
+
+# Check if a target has any linked files
+# $1: collection path
+# $2: target name
+# $3: link root
+# Returns 0 if linked, 1 if not
+is_target_linked() {
+    collection_path="$1"
+    target="$2"
+    link_root="$3"
+
+    target_directory="$(config_directories "${collection_path}/${target}")"
+    log_debug "using target_directory=$target_directory"
+
+    # TODO - is there a solution to this that is more POSIX compliant?
+    for config_dir in $target_directory; do
+        # shellcheck disable=SC2044,SC2086
+        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+            dest_link="$link_root/$config_file"
+            src_config_file="$config_dir/$config_file"
+            log_debug "Checking if dest_link=$dest_link is linked to $src_config_file"
+
+            if [ -L "$dest_link" ]; then
+                # Verify the symlink points to our target
+                link_target=$(readlink "$dest_link")
+                if [ $link_target = $src_config_file ]; then
+                    log_debug "$src_config_file is -> $link_target"
+                    return 0
+                fi
+            fi
+        done
+    done
+    return 1
 }
 
 # Creates symbolic links for all files under the target config directory
@@ -144,10 +389,14 @@ config_directories() {
 create_target_links() {
     collection_path="$1"
     target=$2
-    #target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     link_root=$3
-    require_escalation=1
-    log_debug "Creating link for $*"
+
+    log_debug "create_target_links: BEGIN collection_path=$collection_path target=$target link_root=$link_root"
+
+    if [ "$RUN_LINKS" -ne 0 ]; then
+        log_debug "Not running links as it is disabled RUN_LINKS=$RUN_LINKS"
+        return 0
+    fi
 
     # if in a container or wsl environment, enable extra search directories. These specific
     # environments take priority to the standard 'config' one, which comes last in the find
@@ -155,34 +404,48 @@ create_target_links() {
 
     log_debug "using target_directory=$target_directory"
 
-    # TODO - is there a solution to this that is more POSIX compliant?
-    # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+    for config_dir in $target_directory; do
+        # TODO - is there a solution to this that is more POSIX compliant?
+        # shellcheck disable=SC2044
+        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
 
-        log_debug "Processing $target_directory/$config_file"
+            log_debug "Processing $config_dir/$config_file"
 
-        #dest_file=$(replace_vars_in_string "$config_file")
-        # replace any variable place holders in the relative path, to form a destination path
-        # TODO: This should call replace_vars_in_string but the exiting doesn't work well
-        dest_file=$config_file
-        for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
-            match_value=$(eval "echo \$${s}")
-            if [ -z "$match_value" ]; then
-                log_error "Value for $s is empty, exiting"
+            # Form the source path of the link, which is a path to the current config file
+            src_path="$config_dir/$config_file"
+            dest_file=$config_file
+            require_escalation=1
+
+            log_debug "Initially src_path=$src_path dest_file=$config_file"
+            # replace any variable place holders in the relative path, to form a destination path
+            dest_file=$(replace_vars_in_string "$config_file")
+            rc=$?
+            log_debug "Return code from replace_vars_in_string rc=$rc"
+            if [ "$rc" -ne 0 ]; then
+                log_warn "$config_file has missing variables or incorrect syntax and will be skipped"
+                continue
             fi
-            dest_file=$(echo "$dest_file" | sed "s|%$s%|$match_value|g")
+
+            # in case the variable was at the beginning of the path and containers a $HOME reference,
+            # strip the $link_root from the dest_path to avoid double-ups.
+            # TODO: This feels like a work-around and should be cleaner
+            dest_path="${dest_file#"$link_root"}"
+            log_debug "Stripped $link_root from $dest_file to form $dest_path"
+            dest_path="$link_root/$dest_path"
+
+            # Check if the leading config entry has a ^ then we need to escalate to root
+            is_root_config "$config_file"
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+                # remove the caret from the start of the string
+                dest_file=$(strip_leading_char "$dest_file")
+                dest_path="/$dest_file"
+                require_escalation=0
+            fi
+
+            #validate_path "$dest_file"
+            create_link "$src_path" "$dest_path" "$require_escalation" "$RUN_FORCE"
         done
-
-        # Check if the leading config entry has a ^ then we need to escalate to root
-        if [ "$(is_root_config "$config_file")" ]; then
-            link_root="/"
-            # remove the caret from the start of the string
-            dest_file=$(strip_leading_char "$config_file")
-            require_escalation=0
-        fi
-
-        #validate_path "$dest_file"
-        create_link "$target_directory/$config_file" "$link_root/$dest_file" "$require_escalation" "$RUN_FORCE"
     done
 }
 
@@ -196,23 +459,29 @@ remove_target_links() {
     link_root=$3
     log_debug "Removing links for target=$target in collection=$collection_path"
 
+    if [ "$RUN_LINKS" -ne 0 ]; then
+        log_debug "Not running remove_target_links as it is disabled RUN_LINKS=$RUN_LINKS"
+        return 0
+    fi
+
     # if in a container or wsl environment, enable extra search directories. These specific
     # environments take priority to the standard 'config' one, which comes last in the find
     target_directory="$(config_directories "${collection_path}/${target}")"
 
     # TODO - is there a solution to this that is more POSIX compliant?
     # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" ); do
-        log_debug "Found ${config_file}. Checking if link exists at $link_root/$config_file"
-        if [ -L "$link_root/$config_file" ]; then
+    for config_dir in $target_directory; do
+        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+            log_debug "Found ${config_dir}/${config_file}. Checking if link exists at $link_root/$config_file"
+            if [ -L "$link_root/$config_file" ]; then
 
-            unlink_cmd="unlink $link_root/$config_file"
-            if [ "$(is_root_config "$config_file")" ]; then
-                link_root="/"
-                unlink_cmd="rootdo $unlink_cmd"
+                unlink_cmd="unlink $link_root/${config_file}"
+                if [ "$(is_root_config "$config_file")" ]; then
+                    unlink_cmd="rootdo unlink /${config_file}"
+                fi
+                dry_or_exec "$unlink_cmd"
             fi
-            dry_or_exec "$unlink_cmd"
-        fi
+        done
     done
 }
 
@@ -246,23 +515,21 @@ create_link() {
     basedir=$(dirname "$dest_link")
     if [ ! -d "$basedir" ]; then
         log_debug "Creating directory structure at $basedir"
-        dry_or_exec "mkdir -p $basedir"
+        mkdir_cmd="mkdir -p $basedir"
+        if [ "$require_escalation" -eq 0 ]; then
+            mkdir_cmd="rootdo $mkdir_cmd"
+        fi
+        dry_or_exec "$mkdir_cmd"
     fi
 
     link_cmd="ln -s $source_file $dest_link"
     # if the destination link, starts with a / then we need to escalate to root
     if [ "$require_escalation" -eq 0 ]; then
-        link_cmd="root_do $link_cmd"
+        link_cmd="rootdo $link_cmd"
     fi
 
     log_info "Creating Link $source_file -> $dest_link"
     dry_or_exec "$link_cmd"
-}
-
-# strips the leading character for a string and returns the original string, sans first character
-# $1: The string
-strip_leading_char() {
-    echo "${1#?}"
 }
 
 # $1 - line to conditionally add
@@ -361,8 +628,11 @@ uv_install() {
     PACKAGE=$1
     shift 1
 
+    log_debug "Attempting to install $PACKAGE"
+
     PACKAGE_VERSION=$(version_from_env "$PACKAGE")
     if [ -n "$PACKAGE_VERSION" ]; then
+        log_debug "Found ${PACKAGE}_VERSION=$PACKAGE_VERSION"
         PACKAGE="$PACKAGE==$PACKAGE_VERSION"
     fi
     uv tool install --upgrade "$PACKAGE $*"
@@ -461,6 +731,27 @@ ubuntu_cert_handler() {
 
 fedora_cert_handler() {
     rhel_cert_handler "$@"
+}
+
+# A utility that allows installing software from a hook script, with respect to the LINK_ROOT
+# It performs root escalation, if the current LINK_ROOT is anchored at /
+# Files will be copied recurisvely to the LINK_ROOT destination, so $1 path should be in required order
+# $1: Path to install
+# $2: Optional extra directory, useful for the LINK_ROOT=$HOME use case. Defaults to .local
+caifs_install() {
+    link_root_home=${2:-".local"}
+
+    # If the intended LINK_ROOT starts with / then we escalate privileges
+    if is_root_config "$LINK_ROOT"; then
+        log_debug "Link root appears to reference / - escalating privileges for copy"
+        dry_or_exec rootdo cp -r "$1" "$LINK_ROOT/"
+    elif [ "$LINK_ROOT" = "$HOME" ]; then
+        log_debug "Loot root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
+        dry_or_exec cp -r "$1" "$LINK_ROOT/$link_root_home/"
+    else
+        # respect LINK_ROOT,but it appears to not need privileges
+        dry_or_exec cp -r "$1" "$LINK_ROOT/"
+    fi
 }
 
 # Generic install script for installing per OS_ID based on the above global
