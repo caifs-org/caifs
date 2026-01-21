@@ -1,15 +1,20 @@
 #!/bin/sh
 
+# Log debug to standard error, so we can use debug logging in functions, without impacting
+# the stdout returns
 log_debug() {
     if [ "$VERBOSE" -eq 0 ]; then
-        echo "DEBUG: $*"
+        echo "DEBUG: $*" >&2
     fi
 }
 
+# For general information that is useful for the user to see
 log_info() {
     echo "INFO: $*"
 }
 
+# Information that is unexpected, but acknowledged and catered for
+# eg file conflicts
 log_warn() {
     echo "WARN: $*"
 }
@@ -32,6 +37,7 @@ HOOKS_DIR=hooks
 
 # Local directory for linking certificates into
 LOCAL_CERT_DIR=~/.local/share/certificates
+#LOCAL_COLLECTION_DIR=~/.local/share/caifs-collections
 
 # Force the override of existing link targets
 RUN_FORCE=${CAIFS_RUN_FORCE:-1}
@@ -158,7 +164,7 @@ replace_vars_in_string() {
     for s in $(echo "$path" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
         match_value=$(eval "echo \$${s}")
         if [ -z "$match_value" ]; then
-            log_warn "Value for $s is empty"
+            log_debug "Value for $s is empty"
             return 1
         fi
         path=$(echo "$path" | sed "s|%$s%|$match_value|g")
@@ -228,13 +234,15 @@ is_wsl() {
 # $2: optional character, default '/'
 strip_trailing() {
     char=${2:-"/"}
+    echo "${1%"$char"}"
+}
 
-    if [ "${1%?}" = "$char" ]; then
-        path_prefix="${1%?}"
-    else
-        path_prefix="$1"
-    fi
-    echo "$path_prefix"
+# strips the leading character for a string and returns the original string, sans first character
+# $1: The string
+# $2: The optional charactor to strip if present default ^
+strip_leading_char() {
+    char=${2:-'^'}
+    echo "${1#"$char"}"
 }
 
 # Returns true 0 or false 1 depending if 1 or more hook scripts are present
@@ -381,7 +389,6 @@ is_target_linked() {
 create_target_links() {
     collection_path="$1"
     target=$2
-    #target_directory="${collection_path}/${target}/${CONFIG_DIR}"
     link_root=$3
     require_escalation=1
 
@@ -403,28 +410,33 @@ create_target_links() {
 
             log_debug "Processing $config_dir/$config_file"
 
-            #dest_file=$(replace_vars_in_string "$config_file")
-            # replace any variable place holders in the relative path, to form a destination path
-            # TODO: This should call replace_vars_in_string but the exiting doesn't work well
+            # Form the source path of the link, which is a path to the current config file
+            src_path="$config_dir/$config_file"
             dest_file=$config_file
-            for s in $(echo "$dest_file" | sed -E 's|[^%]*%([^%]*)%[^%]*|\1 |g'); do
-                match_value=$(eval "echo \$${s}")
-                if [ -z "$match_value" ]; then
-                    log_error "Value for $s is empty, exiting"
-                fi
-                dest_file=$(echo "$dest_file" | sed "s|%$s%|$match_value|g")
-            done
+            require_escalation=1
+
+            # replace any variable place holders in the relative path, to form a destination path
+            dest_file=$(replace_vars_in_string "$config_file")
+            rc=$?
+            log_debug "Return code from replace_vars_in_string rc=$rc"
+            if [ "$rc" -ne 0 ]; then
+                log_warn "$config_file has missing variables or incorrect syntax and will be skipped"
+                continue
+            fi
+            dest_path="$link_root/$dest_file"
 
             # Check if the leading config entry has a ^ then we need to escalate to root
-            if [ "$(is_root_config "$config_file")" ]; then
-                link_root="/"
+            is_root_config "$config_file"
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
                 # remove the caret from the start of the string
-                dest_file=$(strip_leading_char "$config_file")
+                dest_file=$(strip_leading_char "$dest_file")
+                dest_path="/$dest_file"
                 require_escalation=0
             fi
 
             #validate_path "$dest_file"
-            create_link "$config_dir/$config_file" "$link_root/$dest_file" "$require_escalation" "$RUN_FORCE"
+            create_link "$src_path" "$dest_path" "$require_escalation" "$RUN_FORCE"
         done
     done
 }
@@ -457,8 +469,7 @@ remove_target_links() {
 
                 unlink_cmd="unlink $link_root/${config_file}"
                 if [ "$(is_root_config "$config_file")" ]; then
-                    link_root="/"
-                    unlink_cmd="rootdo $unlink_cmd"
+                    unlink_cmd="rootdo unlink /${config_file}"
                 fi
                 dry_or_exec "$unlink_cmd"
             fi
@@ -511,14 +522,6 @@ create_link() {
 
     log_info "Creating Link $source_file -> $dest_link"
     dry_or_exec "$link_cmd"
-}
-
-# strips the leading character for a string and returns the original string, sans first character
-# $1: The string
-# $2: The optional charactor to strip if present default ^
-strip_leading_char() {
-    char=${2:-'^'}
-    echo "${1#?}"
 }
 
 # $1 - line to conditionally add

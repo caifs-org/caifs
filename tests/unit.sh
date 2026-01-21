@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=all
 
 . ./$(dirname $0)/../caifs/config/lib/caifslib.sh
 
@@ -80,8 +81,8 @@ test_is_container() {
     assertTrue "Test should be forced to result in true using CAIFS_IN_CONTAINER" "[ $rc -eq 0  ]"
 }
 
-# Enesure stripping the first char from a string, returns the original string, sans first char
-test_strip_char() {
+# Ensure stripping the first char from a string, returns the original string, sans first char
+test_strip_leading_char() {
 
     the_string="^hello/root/path"
     stripped_string=$(strip_leading_char "$the_string")
@@ -90,6 +91,24 @@ test_strip_char() {
 
     assertSame "String should match when the first ^ char is added back" "$the_string" "^$stripped_string"
 }
+
+# Ensure stripping the leading char from a string, by default the / is removed from the original
+# or left intact
+test_strip_trailing_char() {
+
+    set_verbose 0
+    str_with_slash="hello/slashy/path/"
+    str_without_slash="hello/no-slashy/path"
+    
+    stripped_string=$(strip_trailing "$str_with_slash")
+
+    assertNotSame "String $str_with_slash should not match after strip $stripped_string" "$str_with_slash" "$stripped_string"
+    assertSame "String should match when the first ^ char is added back" "$str_with_slash" "$stripped_string/"
+    
+    stripped_string=$(strip_trailing "$str_without_slash")
+    assertSame "String $str_without_slash should match after strip $stripped_string" "$str_without_slash" "$stripped_string"
+}
+
 
 test_replace_vars_in_string() {
     unset VAR1 BOTTOM
@@ -159,5 +178,25 @@ test_gitlab_latest() {
     echo $tag
     assertTrue "Tag value should now not be empty" "[ -n $tag ]"
 }
+
+test_is_root_config() {
+    caret_path="^etc/profile/test.conf"
+    root_path="/usr/sbin/test"
+    local_path="~/home/bin/test"
+    set_verbose 1
+
+    is_root_config "$caret_path"
+    rc=$?
+    assertSame "Caret path $caret_path should be considered a root path" "0" "$rc"
+
+    is_root_config "$root_path"
+    rc=$?
+    assertSame "Root path $root_path should be considered a root path" "0" "$rc"
+    
+    is_root_config "$local_path"
+    rc=$?
+    assertSame "Local path $local_path should NOT be considered a root path" "1" "$rc"
+}
+
 
 . ./shunit2/shunit2
