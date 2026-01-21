@@ -517,7 +517,7 @@ create_link() {
     link_cmd="ln -s $source_file $dest_link"
     # if the destination link, starts with a / then we need to escalate to root
     if [ "$require_escalation" -eq 0 ]; then
-        link_cmd="root_do $link_cmd"
+        link_cmd="rootdo $link_cmd"
     fi
 
     log_info "Creating Link $source_file -> $dest_link"
