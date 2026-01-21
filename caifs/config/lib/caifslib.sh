@@ -390,7 +390,8 @@ create_target_links() {
     collection_path="$1"
     target=$2
     link_root=$3
-    require_escalation=1
+
+    log_debug "create_target_links: BEGIN collection_path=$collection_path target=$target link_root=$link_root"
 
     if [ "$RUN_LINKS" -ne 0 ]; then
         log_debug "Not running links as it is disabled RUN_LINKS=$RUN_LINKS"
@@ -415,6 +416,7 @@ create_target_links() {
             dest_file=$config_file
             require_escalation=1
 
+            log_debug "Initially src_path=$src_path dest_file=$config_file"
             # replace any variable place holders in the relative path, to form a destination path
             dest_file=$(replace_vars_in_string "$config_file")
             rc=$?
@@ -423,7 +425,13 @@ create_target_links() {
                 log_warn "$config_file has missing variables or incorrect syntax and will be skipped"
                 continue
             fi
-            dest_path="$link_root/$dest_file"
+
+            # in case the variable was at the beginning of the path and containers a $HOME reference,
+            # strip the $link_root from the dest_path to avoid double-ups.
+            # TODO: This feels like a work-around and should be cleaner
+            dest_path="${dest_file#"$link_root"}"
+            log_debug "Stripped $link_root from $dest_file to form $dest_path"
+            dest_path="$link_root/$dest_path"
 
             # Check if the leading config entry has a ^ then we need to escalate to root
             is_root_config "$config_file"
@@ -517,7 +525,7 @@ create_link() {
     link_cmd="ln -s $source_file $dest_link"
     # if the destination link, starts with a / then we need to escalate to root
     if [ "$require_escalation" -eq 0 ]; then
-        link_cmd="root_do $link_cmd"
+        link_cmd="rootdo $link_cmd"
     fi
 
     log_info "Creating Link $source_file -> $dest_link"
