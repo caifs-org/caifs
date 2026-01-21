@@ -4,6 +4,44 @@ BINDIR=$(dirname "$0")
 # shellcheck source=config/caifs/lib/caifslib.sh
 . "${BINDIR}"/../lib/caifslib.sh
 
+
+# Expand '*' to all targets in the collections
+# Uses get_collection_paths() and sets run_targets via set_run_targets()
+expand_wildcard_targets() {
+    expanded_targets=""
+    collection_paths="$(get_collection_paths)"
+
+    while [ -n "$collection_paths" ]; do
+        caifs_collection="${collection_paths%%:*}"
+
+        if [ -d "$caifs_collection" ]; then
+            for target_dir in "$caifs_collection"/*/; do
+                [ -d "$target_dir" ] || continue
+                target=$(basename "$target_dir")
+
+                # Only include if it has a valid caifs structure
+                is_valid_caifs_structure "$target_dir" || continue
+
+                # Add to list if not already present
+                case " $expanded_targets " in
+                    *" $target "*) ;;  # Already in list
+                    *) expanded_targets="$expanded_targets $target" ;;
+                esac
+            done
+        fi
+
+        # Loop control
+        if [ "$caifs_collection" = "$collection_paths" ]; then
+            collection_paths=""
+        else
+            collection_paths="${collection_paths#*"${caifs_collection}":}"
+        fi
+    done
+
+    set_run_targets "${expanded_targets# }"  # Trim leading space
+}
+
+
 print_help() {
     cat << 'EOF'
 Usage: caifs [--verbose] [--help] [--version] <command> [options] <targets...>
@@ -50,10 +88,12 @@ Environment variables:
 Examples:
   caifs add git                       Run git target from current directory
   caifs add git bash -d ~/dotfiles    Run multiple targets from specified collection
+  caifs add '*' -d ~/dotfiles         Run all targets from specified collection
   caifs add nvim --links              Only symlink nvim configs, skip hooks
   caifs add docker --hooks            Only run docker hooks, skip symlinks
   caifs add bash --force              Overwrite existing bash config files
   caifs rm git -d ~/dotfiles --links  Remove symlinks for git target
+  caifs rm '*' -d ~/dotfiles          Remove all targets from specified collection
   caifs status -d ~/dotfiles          Show link status for all targets
 EOF
 }
@@ -129,6 +169,11 @@ main() {
 
             set_run_targets "$*"
 
+            # Expand wildcard to all targets
+            if [ "$(get_run_targets)" = "*" ]; then
+                expand_wildcard_targets
+            fi
+
             cmd_add "$(get_collection_paths)" "$(get_run_targets)" "$(get_link_root)"
             ;;
         rm)
@@ -162,6 +207,11 @@ main() {
                 set_collection_paths "$ARG_CAIFS_COLLECTIONS"
             fi
             set_run_targets "$*"
+
+            # Expand wildcard to all targets
+            if [ "$(get_run_targets)" = "*" ]; then
+                expand_wildcard_targets
+            fi
 
             cmd_remove "$(get_collection_paths)" "$(get_run_targets)" "$(get_link_root)"
             ;;
