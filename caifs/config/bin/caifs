@@ -1,61 +1,15 @@
 #!/bin/sh
 
 BINDIR=$(dirname "$0")
+# shellcheck source=config/caifs/lib/caifslib.sh
 . "${BINDIR}"/../lib/caifslib.sh
-
-##
-## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
-# By default, run both links and hooks
-VERSION=1.0.0
-RUN_LINKS=${CAIFS_RUN_LINKS:-0}
-RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
-
-# Force the override of existing link targets
-export RUN_FORCE="${CAIFS_RUN_FORCE:-1}"
-
-# Multiple targets could be specified. We will run them in order
-RUN_TARGETS=""
-VERBOSE=${CAIFS_VERBOSE:=1}
-export DRY_RUN="${CAIFS_DRY_RUN:-1}"
-
-# A list of directories to interogate for caifs collections
-CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
-export CONFIG_DIR=config
-HOOKS_DIR=hooks
-
-# The root directory of where config should link to. By default it should be home, but for root scenarios
-# this can be overridden
-LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
-
-# Source the OS type and export the most useful for being available in executed scripts
-export OS_TYPE=
-OS_TYPE="$(uname -s)"
-
-export OS_ID=""
-export OS_VERSION_ID=""
-
-export OS_ARCH=
-OS_ARCH="$(uname -m)"
-
-if [ "${OS_TYPE}" = "Linux" ]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    OS_ID=${ID}
-    OS_VERSION_ID=${VERSION_ID}
-
-elif [ "${OS_TYPE}" = "Darwin" ]; then
-    OS_ID=$(sw_vers -productName)
-    OS_VERSION_ID=$(sw_vers -productVersion)
-else
-    log_error "Unsupported Operating System - $OS_TYPE"
-fi
 
 
 # Expand '*' to all targets in the collections
-# Sets RUN_TARGETS to space-separated list of all target names
+# Uses get_collection_paths() and sets run_targets via set_run_targets()
 expand_wildcard_targets() {
     expanded_targets=""
-    collection_paths="$CAIFS_COLLECTIONS"
+    collection_paths="$(get_collection_paths)"
 
     while [ -n "$collection_paths" ]; do
         caifs_collection="${collection_paths%%:*}"
@@ -65,8 +19,8 @@ expand_wildcard_targets() {
                 [ -d "$target_dir" ] || continue
                 target=$(basename "$target_dir")
 
-                # Only include if it has config/ or hooks/
-                [ -d "$target_dir/$CONFIG_DIR" ] || [ -d "$target_dir/$HOOKS_DIR" ] || continue
+                # Only include if it has a valid caifs structure
+                is_valid_caifs_structure "$target_dir" || continue
 
                 # Add to list if not already present
                 case " $expanded_targets " in
@@ -84,7 +38,7 @@ expand_wildcard_targets() {
         fi
     done
 
-    RUN_TARGETS="${expanded_targets# }"  # Trim leading space
+    set_run_targets "${expanded_targets# }"  # Trim leading space
 }
 
 
@@ -156,7 +110,7 @@ main() {
     shift
 
     if [ "$SUBCOMMAND" = "--verbose" ] || [ "$SUBCOMMAND" = "-v" ]; then
-        VERBOSE=0;
+        set_verbose 0;
         if [ $# -eq 0 ]; then
             print_help
             exit 1
@@ -165,7 +119,7 @@ main() {
         shift
     fi
     if [ "$SUBCOMMAND" = "--dry-run" ] || [ "$SUBCOMMAND" = "-n" ]; then
-        DRY_RUN=0
+        set_dry_run 0
         SUBCOMMAND=$1
         shift
     fi
@@ -189,8 +143,8 @@ main() {
             ARG_CAIFS_COLLECTIONS=""
             while true; do
                 case "$1" in
-                    -l|--links) RUN_HOOKS=1; shift ;;
-                    -h|--hooks) RUN_LINKS=1; shift ;;
+                    -l|--links) set_run_hooks 1; shift ;;
+                    -h|--hooks) set_run_links 1; shift ;;
                     # If directory is specified, override any collection paths and just work with this directory
                     -d|--directory)
                         if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
@@ -200,9 +154,9 @@ main() {
                         fi
                         shift 2
                         ;;
-                    -n|--dry-run) DRY_RUN=0; shift ;;
-                    -r|--link-root) LINK_ROOT=$(realpath "$2"); shift 2;;
-                    -f|--force) RUN_FORCE=0; shift ;;
+                    -n|--dry-run) set_dry_run 0; shift ;;
+                    -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
+                    -f|--force) set_force 0; shift ;;
                     --) shift; break ;;
                     *) break ;;
                 esac
@@ -210,23 +164,17 @@ main() {
 
             # All directories have been parsed, so override any pre-set CAIFS_COLLECTIONS entries
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
-                CAIFS_COLLECTIONS=$ARG_CAIFS_COLLECTIONS
+                set_collection_paths "$ARG_CAIFS_COLLECTIONS"
             fi
-            RUN_TARGETS="$*"
+
+            set_run_targets "$*"
 
             # Expand wildcard to all targets
-            if [ "$RUN_TARGETS" = "*" ]; then
+            if [ "$(get_run_targets)" = "*" ]; then
                 expand_wildcard_targets
             fi
 
-            log_debug "$RUN_TARGETS"
-            if [ -z "$RUN_TARGETS" ]; then
-                echo "At least one target is required!"
-                exit 1
-            fi
-
-            log_debug "$SUBCOMMAND RUN_TARGETS=$RUN_TARGETS | VERBOSE=$VERBOSE RUN_LINKS=$RUN_LINKS RUN_HOOKS=$RUN_HOOKS ROOT_DIRECTORY CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS"
-            cmd_add
+            cmd_add "$(get_collection_paths)" "$(get_run_targets)" "$(get_link_root)"
             ;;
         rm)
             SUB_TEMP=$(getopt -o r:nlhd: -l link-root:,dry-run,links,hooks,directory: -n "rm" -- "$@")
@@ -245,10 +193,10 @@ main() {
                         fi
                         shift 2
                         ;;
-                    -l|--links) RUN_HOOKS=1; shift ;;
-                    -h|--hooks) RUN_LINKS=1; shift ;;
-                    -n|--dry-run) DRY_RUN=0; shift ;;
-                    -r|--link-root) LINK_ROOT=$(realpath "$2"); shift 2;;
+                    -l|--links) set_run_hooks 1; shift ;;
+                    -h|--hooks) set_run_links 1; shift ;;
+                    -n|--dry-run) set_dry_run 0; shift ;;
+                    -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
                     --) shift; break ;;
                     *) break ;;
                 esac
@@ -256,17 +204,16 @@ main() {
 
             # All directories have been parsed, so override any pre-set CAIFS_COLLECTIONS entries
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
-                CAIFS_COLLECTIONS=$ARG_CAIFS_COLLECTIONS
+                set_collection_paths "$ARG_CAIFS_COLLECTIONS"
             fi
-            RUN_TARGETS="$*"
+            set_run_targets "$*"
 
             # Expand wildcard to all targets
-            if [ "$RUN_TARGETS" = "*" ]; then
+            if [ "$(get_run_targets)" = "*" ]; then
                 expand_wildcard_targets
             fi
 
-            log_debug "$SUBCOMMAND CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS RUN_TARGETS=$RUN_TARGETS"
-            cmd_remove
+            cmd_remove "$(get_collection_paths)" "$(get_run_targets)" "$(get_link_root)"
             ;;
         status)
             SUB_TEMP=$(getopt -o r:d: -l link-root:,directory: -n "status" -- "$@")
@@ -285,17 +232,17 @@ main() {
                         fi
                         shift 2
                         ;;
-                    -r|--link-root) LINK_ROOT=$(realpath "$2"); shift 2;;
+                    -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
                     --) shift; break ;;
                     *) break ;;
                 esac
             done
 
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
-                CAIFS_COLLECTIONS=$ARG_CAIFS_COLLECTIONS
+                set_collection_paths "$ARG_CAIFS_COLLECTIONS"
             fi
 
-            cmd_status
+            cmd_status "$(get_collection_paths)" "$(get_link_root)"
             ;;
         *)
             echo "Unknown subcommand: $SUBCOMMAND"
@@ -307,74 +254,27 @@ main() {
 }
 
 
-# Run a specific type of hook for a given target.
-# The script is sourced to give access to all the caifs runtime variables.
-# $1: collection path
-# $2: target
-# $3: hook type [pre|post|rm]
-run_hook() {
-    collection_path="$1"
-    target=$2
-    hook_type=$3
-    log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
-
-    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
-        TMP_DIR=$(mktemp -d)
-        cd "${TMP_DIR}" || exit
-
-        # shellcheck disable=SC1090
-        # import the hook script functions
-        . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
-
-        run_hook_functions
-
-        cd - || exit
-        rm -rf "${TMP_DIR}"
-    else
-        log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
-    fi
-}
-
-# $1: collection path
-# $2: The target name to run the hook for
-run_remove_hook() {
-    run_hook "$@" "rm"
-}
-
-# $1: collection path
-# $2: The target name to run the hook for
-run_pre_hook() {
-    run_hook "$@" "pre"
-}
-
-# $1: collection path
-# $2: The target name to run the hook for
-run_post_hook() {
-    run_hook "$@" "post"
-}
-
-
 # command handler for running the remove action
-# $1: target to action
+# $1: collection paths to consider
+# $2: targets to action
+# $3: link root
 cmd_remove() {
-    log_debug "Removing $RUN_TARGETS from '$CAIFS_COLLECTIONS'"
-    collection_paths="$CAIFS_COLLECTIONS"
+    collection_paths=$1
+    run_targets=$2
+    link_root=$3
+    log_debug "cmd_remove: begin $*"
 
     while [ -n "$collection_paths" ]; do
         caifs_collection="${collection_paths%%:*}"
 
         log_debug "Working with $caifs_collection"
 
-        for target in $RUN_TARGETS; do
+        for target in $run_targets; do
             log_debug "$target"
 
-            if [ "$RUN_LINKS" -eq 0 ]; then
-                remove_target_links "${caifs_collection}" "${target}" "${LINK_ROOT}"
-            fi
+            remove_target_links "${caifs_collection}" "${target}" "${link_root}"
+            run_remove_hook "${caifs_collection}" "$target"
 
-            if [ "$RUN_HOOKS" -eq 0 ]; then
-                run_remove_hook "${caifs_collection}" "$target"
-            fi
         done
             # Loop control, get the next path to operate on
         if [ "$caifs_collection" = "$collection_paths" ]; then
@@ -384,14 +284,21 @@ cmd_remove() {
             collection_paths="${collection_paths#*"${caifs_collection}":}"
         fi
     done
+
+    log_debug "cmd_remove: end"
 }
 
 # Loop over the CAIFS_COLLECTIONS variable, which is colon (:) separated paths to caifs collections
 # First target wins, so order in the collection is important.
+# $1 collection_paths
+# $2 targets - an array of 1 or more targets to add
+# $3 link_root
 cmd_add() {
-    log_debug "cmd_add: begin with collection_paths '$CAIFS_COLLECTIONS'"
+    log_debug "cmd_add: begin $*"
 
-    collection_paths="$CAIFS_COLLECTIONS"
+    collection_paths="$1"
+    run_targets="$2"
+    link_root="$3"
 
     while [ -n "$collection_paths" ]; do
 
@@ -399,20 +306,14 @@ cmd_add() {
 
         log_debug "Working with $caifs_collection"
 
-        for target in $RUN_TARGETS; do
+        for target in $run_targets; do
             log_debug "$target"
 
-            if [ "$RUN_HOOKS" -eq 0 ]; then
-                run_pre_hook "${caifs_collection}" "$target"
-            fi
+            run_pre_hook "${caifs_collection}" "$target"
 
-            if [ "$RUN_LINKS" -eq 0 ]; then
-                create_target_links "${caifs_collection}" "${target}" "${LINK_ROOT}"
-            fi
+            create_target_links "${caifs_collection}" "${target}" "${link_root}"
 
-            if [ "$RUN_HOOKS" -eq 0 ]; then
-                run_post_hook "${caifs_collection}" "$target"
-            fi
+            run_post_hook "${caifs_collection}" "$target"
         done
 
         # Loop control, get the next path to operate on
@@ -427,43 +328,14 @@ cmd_add() {
     log_debug "cmd_add: end"
 }
 
-# Check if a target has any linked files
-# $1: collection path
-# $2: target name
-# $3: link root
-# Returns 0 if linked, 1 if not
-is_target_linked() {
-    collection_path="$1"
-    target="$2"
-    link_root="$3"
-    target_directory="${collection_path}/${target}/${CONFIG_DIR}"
-
-    if [ ! -d "$target_directory" ]; then
-        return 1
-    fi
-
-    # Check if any config file has a corresponding symlink in link_root
-    # shellcheck disable=SC2044
-    for config_file in $(find "${target_directory}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
-        dest_link="$link_root/$config_file"
-        if [ -L "$dest_link" ]; then
-            # Verify the symlink points to our target
-            link_target=$(readlink "$dest_link")
-            case "$link_target" in
-                *"$target_directory"*)
-                    return 0
-                    ;;
-            esac
-        fi
-    done
-    return 1
-}
-
 # Display status of all targets in collections
+# $1 collection_paths
+# $2 link_root
 cmd_status() {
-    log_debug "cmd_status: CAIFS_COLLECTIONS=$CAIFS_COLLECTIONS LINK_ROOT=$LINK_ROOT"
+    log_debug "cmd_status: begin $*"
 
-    collection_paths="$CAIFS_COLLECTIONS"
+    collection_paths=$1
+    link_root=$2
 
     # Detect unicode support, fallback to ASCII
     case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
@@ -500,12 +372,13 @@ cmd_status() {
                 [ -d "$target_dir" ] || continue
                 target=$(basename "$target_dir")
 
-                # Skip if neither config nor hooks directory exists
-                [ -d "$target_dir/$CONFIG_DIR" ] || [ -d "$target_dir/$HOOKS_DIR" ] || continue
+                log_debug "Checking if target_dir=$target_dir contains a valid structure"
+                is_valid_caifs_structure "$target_dir" || continue
 
                 # Check linked status (pad for alignment, color for linked column only)
-                if [ -d "$target_dir/$CONFIG_DIR" ]; then
-                    if is_target_linked "$caifs_collection" "$target" "$LINK_ROOT"; then
+                if has_config "$target_dir"; then
+                    log_debug "target_dir=$target_dir has config files"
+                    if is_target_linked "$caifs_collection" "$target" "$link_root"; then
                         linked_status="${GREEN}${CHECK}${NC}       "
                     else
                         linked_status="${RED}${CROSS}${NC}       "
@@ -515,7 +388,8 @@ cmd_status() {
                 fi
 
                 # Check hooks status (has hooks/*.sh files)
-                if [ -d "$target_dir/$HOOKS_DIR" ] && ls "$target_dir/$HOOKS_DIR"/*.sh >/dev/null 2>&1; then
+                if has_hooks "$target_dir"; then
+                    log_debug "target_dir=$target_dir has hooks"
                     hooks_status="${CHECK}"
                 else
                     hooks_status="${CROSS}"
@@ -532,6 +406,7 @@ cmd_status() {
             collection_paths="${collection_paths#*"${caifs_collection}":}"
         fi
     done
+    log_debug "cmd_status : end"
 }
 
 main "$@"

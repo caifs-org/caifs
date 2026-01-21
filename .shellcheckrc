@@ -1,4 +1,4 @@
 shell=sh
 
 disable=SC1091
-source-path=src/lib/
+source-path=caifs/config/lib/caifslib.sh
