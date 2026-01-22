@@ -35,18 +35,35 @@ Running the equivalent in a docker file, after a bootstrap gives you consistency
 ``` Dockerfile
 FROM debian:trixie-slim
 
-RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
-    caifs add curl --hooks
+RUN curl -sL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/install.sh | sh && \
+    caifs add caifs-common -d . && \
+    caifs add docker-cli  --hooks
 
 # Your other docker image build
 ...
 
 ```
 
+Simplified dependency management in a GitHub Pipeline
+
+``` yaml
+...
+  steps:
+    - name: Add the dependencies to the runner
+      run: |
+        curl -sL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/install.sh | sh
+        caifs add caifs-common
+        caifs add uv ruff pre-commit rumdl docker-cli trivy just
+
+    - name: Run pre-commit checks
+      run: |
+        pre-commit run --all
+```
+
 ## Other good reasons to use CAIFS
 
 - 100% pure POSIX compliant shell. So it should run just about everywhere
-- less than 50kb in size, so it won't take up precious space in your Docker builds
+- less than 60kb in size, so it won't take up precious space in your Docker builds
 - It has zero dependencies, besides coreutils functions such as find, `sed`, `grep`, `dirname`, `realpath`, `pathchk`...
 
 > [!NOTE]
@@ -57,13 +74,13 @@ RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
 
 YOLO it onto your system to install locally within `~/.local/`
 
-`curl -sL https://github.com/caifs-org/caifs/install.sh | sh`
+`curl -sL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/install.sh | sh`
 
 OR
 
 Install globally by using env var `INSTALL_PREFIX=/usr/local/` and root privileges
 
-`INSTALL_PREFIX=/usr/local/ curl -sOL https://github.com/caifs-org/caifs/install.sh | sudo sh -c`
+`INSTALL_PREFIX=/usr/local/ curl -sOL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/install.sh | sudo sh -c`
 
 Check it's working and on your path with -
 
@@ -77,6 +94,23 @@ Clone the repository and install CAIFS, using CAIFS
 git clone https://github.com/caifs-org/caifs/caifs.git
 ./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local"
 ```
+
+### Enable caifs-common collection (optional but recommended)
+
+(caifs-common)<https://github.com/caifs-org/caifs-common> is a collection of curated installs of commonly used developer
+software that can be enabled via the caifs library.
+
+```shell
+caifs add caifs
+caifs add caifs-common -d . 
+```
+
+This will grab the latest `caifs-common` release and place it into `~/.local/share/caifs-collections/caifs-common` CAIFS
+automatically looks for this library so there is no need to add it to the `$CAIFS_COLLECTIONS` environment variable or
+specify it directly with the `caifs add --directory <switch>` switch.
+
+> ![TIP]
+> Running `caifs add caifs-common` periodically will grab the latest version and keep it up to date
 
 ## Collection Structure
 
@@ -179,6 +213,10 @@ linux() {
 ## Usage Examples
 
 ``` shell
+
+# bootstrap your system the caifs-common library, which contains everything below
+caifs add caifs-common -d .
+
 # does symlinking and pre/post hooks for target uv
 caifs add uv
 
@@ -210,30 +248,56 @@ caifs rm git -d ~/my-dotfiles --hooks
 
 ## Environment Variables
 
-| Variable             | Default | Description                                                                    |
-|----------------------|---------|--------------------------------------------------------------------------------|
-| `CAIFS_COLLECTIONS`  | `$PWD`  | Colon-separated list of collection paths to search for targets                 |
-| `CAIFS_LINK_ROOT`    | `$HOME` | Destination root for symlinks (e.g., set to `/` for system-wide configs)       |
-| `CAIFS_VERBOSE`      | `1`     | Set to `0` to enable debug output                                              |
-| `CAIFS_RUN_FORCE`    | `1`     | Set to `0` to force overwrite existing files/links                             |
-| `CAIFS_RUN_LINKS`    | `0`     | Set to `1` to skip symlinking (equivalent to `--hooks`)                        |
-| `CAIFS_RUN_HOOKS`    | `0`     | Set to `1` to skip hooks (equivalent to `--links`)                             |
-| `CAIFS_DRY_RUN`      | `1`     | Set to `0` to show what would run without making changes                       |
-| `CAIFS_IN_CONTAINER` | unset   | Set to `0` to set container config to run + triggers `container()` hooks).     |
-|                      |         | Set to `1` to specify not in container, regardless of if in a container or not |
-| `CAIFS_IN_WSL`       | unset   | Set to `0` to set WSL config to run. Set to `1` to force to run                |
-|                      |         |                                                                                |
+| Variable                  | Default                          | Description                                                                    |
+|---------------------------|----------------------------------|--------------------------------------------------------------------------------|
+| `CAIFS_COLLECTIONS`       | `$PWD`                           | Colon-separated list of collection paths to search for targets                 |
+| `CAIFS_LINK_ROOT`         | `$HOME`                          | Destination root for symlinks (e.g., set to `/` for system-wide configs)       |
+| `CAIFS_VERBOSE`           | `1`                              | Set to `0` to enable debug output                                              |
+| `CAIFS_RUN_FORCE`         | `1`                              | Set to `0` to force overwrite existing files/links                             |
+| `CAIFS_RUN_LINKS`         | `0`                              | Set to `1` to skip symlinking (equivalent to `--hooks`)                        |
+| `CAIFS_RUN_HOOKS`         | `0`                              | Set to `1` to skip hooks (equivalent to `--links`)                             |
+| `CAIFS_DRY_RUN`           | `1`                              | Set to `0` to show what would run without making changes                       |
+| `CAIFS_IN_CONTAINER`      | unset                            | Set to `0` to set container config to run + triggers `container()` hooks).     |
+|                           |                                  | Set to `1` to specify not in container, regardless of if in a container or not |
+| `CAIFS_IN_WSL`            | unset                            | Set to `0` to set WSL config to run. Set to `1` to force to run                |
+| `CAIFS_LOCAL_COLLECTIONS` | ~/.local/share/caifs-collections | A central store for collections that is automatically checked.                 |
+|                           |                                  |                                                                                |
 
 ## Advanced Configuration
 
 ### Define multiple collections
 
+Enabling multiple collections allows you to separate out your personal (and preferred) configuration into one collection
+,then for instance, a work-specific collection defined, followed by the standard `caifs-common` library.
+
+When you runs CAIFS, it will search all the collections, with the order you specify the collections in being the order
+of operations.
+
+There are a few options to support this.
+
+#### CLI arguments
+
+Using the `-d|--directory` arguments *will* override any `$CAIFS_COLLECTIONS` variable set, allowing you to work with a
+collection in isolation.
+
+#### CAIFS_COLLECTIONS environment variable
+
 The environment variable, `$CAIFS_COLLECTIONS`, can be set with multiple `:`-delimited directory paths. Much like the
 standard `$PATH` variable. Setting this variable is the equivalent of supplying multiple `-d|--directory`
 arguments to the `caifs add|rm` command itself.
 
-Using the `-d|--directory` arguments *will* override any `$CAIFS_COLLECTIONS` variable set, allowing you to work with a
-collection in isolation.
+#### Built in mechanism aka caifs-ception
+
+When `caifs` is run with no `-d|--directory` arguments and the `$CAIFS_COLLECTIONS` variable is empty, then CAIFS will
+internally look to an XDG area of `~/.local/share/caifs-collections/` for collections to process.
+
+CAIFS will look only 1 level deep in that directory and then attempt to validate that they are in-fact, caifs
+compatible directories. It adds each collection it finds to the back of the queue (internally the queue is just the
+`$CAIFS_COLLECTIONS` variable), that is to say, the order of the collections in `~/.local/share/caifs-collections/` is
+important and is dictated by the `find` defaults.
+
+The one exception to this, is the `caifs-common` library. If present, then this collection will always be at the back
+of the line. Allowing people to override configuration if they wish.
 
 ### Install to non-$HOME area
 
@@ -287,6 +351,7 @@ COPY my-docker-collection /usr/local/share/my-docker-collection
 # install some software and add the config from a custom collection, but
 # create the links at the link-root of /app/
 RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
+    caifs add -d . caifs-common && \
     caifs add uv git pre-commit ruff \
       --link-root /app \
       -d /usr/local/share/my-docker-collection
