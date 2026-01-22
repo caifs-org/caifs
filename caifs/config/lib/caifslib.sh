@@ -135,6 +135,7 @@ get_run_targets() {
 # shellcheck disable=SC2045
 populate_caifs_collections() {
 
+    LOCAL_COLLECTION_DIR=$(strip_trailing "$LOCAL_COLLECTION_DIR")
     log_debug "populate_caifs_collections: BEGIN"
     for collection_dir in $(ls -d "${LOCAL_COLLECTION_DIR}"/*); do
         collection_name=$(basename "$collection_dir")
