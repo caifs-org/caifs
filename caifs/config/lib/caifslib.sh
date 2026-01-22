@@ -132,20 +132,22 @@ get_run_targets() {
 # iterate over the standard collection path and discovers installed collections
 # each collection is added to the variable in order, apart from caifs-common which is always last
 # If CAIFS_COLLECTION is non-empty, do nothing. Otherwise populate with auto found
-# shellcheck disable=SC2044
+# shellcheck disable=SC2045
 populate_caifs_collections() {
 
-    for directory in $(find "$LOCAL_COLLECTION_DIR"/* -maxdepth 1 -type d -name caifs-common -prune -o -exec realpath {} \;); do
-        collection_name=$(basename "$directory")
-        log_debug "Adding $collection_name in ${directory}"
-
-        CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$directory"
+    log_debug "populate_caifs_collections: BEGIN"
+    for collection_dir in $(ls -d "${LOCAL_COLLECTION_DIR}"/*); do
+        collection_name=$(basename "$collection_dir")
+        log_debug "Adding $collection_name in ${LOCAL_COLLECTION_DIR}"
+        [ "$collection_name" != "caifs-common" ] || continue
+        CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$collection_dir"
     done
 
     # Finally add the caifs-common lib to the end
     if [ -d "$LOCAL_COLLECTION_DIR/caifs-common" ]; then
         CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$LOCAL_COLLECTION_DIR/caifs-common"
     fi
+    log_debug "populate_caifs_collections: END"
 }
 
 # Runs a command, if the DRY_RUN setting is not in effect
