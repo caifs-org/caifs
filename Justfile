@@ -36,7 +36,12 @@ bump-version $patch="" $minor="" $major="" *args:
     bump-my-version bump $patch $minor $major {{ args }}
 
 create-release-tar:
-    tar -czvf release.tar.gz caifs/
+    tar -czvf release.tar.gz caifs/ caifs-common/
+
+[doc('List contents of release tarball')]
+[script]
+list-release-tar-files:
+    tar -ztf release.tar.gz
 
 # Install pre-commit hooks
 pre-commit-install:
