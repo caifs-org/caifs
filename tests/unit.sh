@@ -183,7 +183,7 @@ test_is_root_config() {
     caret_path="^etc/profile/test.conf"
     root_path="/usr/sbin/test"
     local_path="~/home/bin/test"
-    set_verbose 1
+    set_verbose 0
 
     is_root_config "$caret_path"
     rc=$?

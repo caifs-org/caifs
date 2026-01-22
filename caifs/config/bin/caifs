@@ -163,8 +163,11 @@ main() {
             done
 
             # All directories have been parsed, so override any pre-set CAIFS_COLLECTIONS entries
+            # Otherwise populate the existing CAIFS_COLLECTIONS with standard
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
                 set_collection_paths "$ARG_CAIFS_COLLECTIONS"
+            else
+                populate_caifs_collections
             fi
 
             set_run_targets "$*"
@@ -205,6 +208,8 @@ main() {
             # All directories have been parsed, so override any pre-set CAIFS_COLLECTIONS entries
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
                 set_collection_paths "$ARG_CAIFS_COLLECTIONS"
+            else
+                populate_caifs_collections
             fi
             set_run_targets "$*"
 
@@ -240,6 +245,8 @@ main() {
 
             if [ -n "$ARG_CAIFS_COLLECTIONS" ]; then
                 set_collection_paths "$ARG_CAIFS_COLLECTIONS"
+            else
+                populate_caifs_collections
             fi
 
             cmd_status "$(get_collection_paths)" "$(get_link_root)"

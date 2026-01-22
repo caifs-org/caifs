@@ -37,7 +37,7 @@ HOOKS_DIR=hooks
 
 # Local directory for linking certificates into
 LOCAL_CERT_DIR=~/.local/share/certificates
-#LOCAL_COLLECTION_DIR=~/.local/share/caifs-collections
+LOCAL_COLLECTION_DIR=${CAIFS_LOCAL_COLLECTIONS:-"$HOME/.local/share/caifs-collections"}
 
 # Force the override of existing link targets
 RUN_FORCE=${CAIFS_RUN_FORCE:-1}
@@ -52,7 +52,7 @@ VERBOSE=${CAIFS_VERBOSE:=1}
 DRY_RUN=${CAIFS_DRY_RUN:-1}
 
 # A list of directories to interogate for caifs collections
-CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:=$PWD}
+CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:-""}
 
 # The root directory of where config should link to. By default it should be home, but for root scenarios
 # this can be overridden
@@ -129,6 +129,25 @@ get_run_targets() {
     echo "$RUN_TARGETS"
 }
 
+# iterate over the standard collection path and discovers installed collections
+# each collection is added to the variable in order, apart from caifs-common which is always last
+# If CAIFS_COLLECTION is non-empty, do nothing. Otherwise populate with auto found
+# shellcheck disable=SC2044
+populate_caifs_collections() {
+
+    for directory in $(find "$LOCAL_COLLECTION_DIR"/* -maxdepth 1 -type d -name caifs-common -prune -o -exec realpath {} \;); do
+        collection_name=$(basename "$directory")
+        log_debug "Adding $collection_name in ${directory}"
+
+        CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$directory"
+    done
+
+    # Finally add the caifs-common lib to the end
+    if [ -d "$LOCAL_COLLECTION_DIR/caifs-common" ]; then
+        CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$LOCAL_COLLECTION_DIR/caifs-common"
+    fi
+}
+
 # Runs a command, if the DRY_RUN setting is not in effect
 dry_or_exec() {
     if [ "$DRY_RUN" -ne 0 ]; then
@@ -187,6 +206,10 @@ is_root_config() {
         ^*)
             log_debug "$path is designated for root via leading ^"
             return 0
+            ;;
+        $HOME*)
+            log_debug "$path is prefixed with \$HOME, not considering this a root config"
+            return 1
             ;;
         /*)
             log_debug "$path is designated for root via leading /"
@@ -746,7 +769,7 @@ caifs_install() {
         log_debug "Link root appears to reference / - escalating privileges for copy"
         dry_or_exec rootdo cp -r "$1" "$LINK_ROOT/"
     elif [ "$LINK_ROOT" = "$HOME" ]; then
-        log_debug "Loot root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
+        log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
         dry_or_exec cp -r "$1" "$LINK_ROOT/$link_root_home/"
     else
         # respect LINK_ROOT,but it appears to not need privileges
