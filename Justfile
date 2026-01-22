@@ -3,6 +3,8 @@ set export
 SHUNIT2_VERSION := '2.1.8'
 CAIFS_VERBOSE := env('CAIFS_VERBOSE', '1')
 
+PATH := x"$HOME/.local/bin:$PATH"
+
 # List available recipes
 help:
     just --list
@@ -45,5 +47,12 @@ pre-commit-run:
     pre-commit run --all
 
 # Install caifs to ~/.local/ (symlinks bin and lib)
-install:
+[script]
+install-caifs:
     ./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local" --force
+    caifs add caifs-common -d . --hooks
+
+[doc('Install CI runner dependencies (uv, pre-commit, rumdl)')]
+[script]
+install-caifs-runner-deps:
+    caifs add uv pre-commit rumdl --hooks
