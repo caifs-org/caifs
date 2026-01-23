@@ -82,6 +82,18 @@ test_is_container() {
     assertTrue "Test should be forced to result in true using CAIFS_IN_CONTAINER" "[ $rc -eq 0  ]"
 }
 
+test_is_laptop() {
+    CAIFS_IS_LAPTOP=1
+    is_laptop
+    rc="$?"
+    assertTrue "Test should not be a laptop when CAIFS_IS_LAPTOP=1" "[ $rc -ne 0  ]"
+
+    CAIFS_IS_LAPTOP=0
+    is_laptop
+    rc="$?"
+    assertTrue "Test should be forced to result in true using CAIFS_IS_LAPTOP=0" "[ $rc -eq 0  ]"
+}
+
 # Ensure stripping the first char from a string, returns the original string, sans first char
 test_strip_leading_char() {
 

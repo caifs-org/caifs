@@ -263,6 +263,42 @@ is_wsl() {
     return 1
 }
 
+# Detects if running on a laptop
+# Returns 0 if a laptop, 1 otherwise
+is_laptop() {
+    if [ -n "$CAIFS_IS_LAPTOP" ]; then
+        if [ "$CAIFS_IS_LAPTOP" = "0" ]; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # Linux: check for battery via power supply type (more reliable than BAT* naming)
+    for ps in /sys/class/power_supply/*; do
+        [ -f "$ps/type" ] && [ "$(cat "$ps/type" 2>/dev/null)" = "Battery" ] && return 0
+    done
+
+    # Linux: fallback to DMI chassis type
+    # 8=Portable, 9=Laptop, 10=Notebook, 14=Sub-Notebook, 31=Convertible, 32=Detachable
+    if [ -f /sys/class/dmi/id/chassis_type ]; then
+        case "$(cat /sys/class/dmi/id/chassis_type)" in
+            8|9|10|14|31|32) return 0 ;;
+        esac
+    fi
+
+    # untested...
+    # macOS: check if it's a portable Mac
+    if [ "$OS_ID" = "macOS" ]; then
+        ioreg -l 2>/dev/null | grep -q '"BatteryInstalled" = Yes' && return 0
+        # Fallback: check model identifier for portable Macs
+        system_profiler SPHardwareDataType 2>/dev/null | grep -qiE 'MacBook|Portable' && return 0
+        return 1
+    fi
+
+    return 1
+}
+
 # strips a trail character from the supplied string, returning the string, sans character
 # $1: the string to strip
 # $2: optional character, default '/'
