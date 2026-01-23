@@ -17,11 +17,12 @@ _touchpath() {
 }
 
 setUp() {
-    :
+    TMPDIR=$(mktemp -d)
+    cd $TMPDIR
 }
 
 tearDown() {
-    :
+    rm -rf $TMPDIR
 }
 
 test_dry_run_or_exec() {
@@ -198,5 +199,79 @@ test_is_root_config() {
     assertSame "Local path $local_path should NOT be considered a root path" "1" "$rc"
 }
 
+test_has_config() {
+
+    _paths="target1/config/.local/bin/test"
+    _paths="$_paths target2/config_wsl/.local/bin/test"
+    _paths="$_paths target3/config_container/.local/bin/test"
+    _paths="$_paths target4/hooks/.local/bin/test"
+    for c in $_paths; do
+        _touchpath "$c"
+    done
+    
+    has_config "target1"
+    rc=$?
+    assertSame "should return true" "0" "$rc"
+
+    has_config "target2"
+    rc=$?
+    assertSame "should return true" "0" "$rc"
+
+    has_config "target3"
+    rc=$?
+    assertSame "should return true" "0" "$rc"
+
+    has_config "target4"
+    rc=$?
+    assertSame "should return false" "1" "$rc"
+
+}
+
+test_valid_caifs_structure() {
+
+    _paths="target1/config/.local/bin/test"
+    _paths="$_paths target2/hooks/pre.sh"
+    _paths="$_paths target3/config/.local/bin/test"
+    _paths="$_paths target3/hooks/post.sh"
+    _paths="$_paths target4/hooks/random.sh"
+    
+    for c in $_paths; do
+        _touchpath "$c"
+    done
+    
+    is_valid_caifs_structure "target1"
+    rc=$?
+    assertSame "should be a valid caifs structure" "0" "$rc"
+
+    is_valid_caifs_structure "target2"
+    rc=$?
+    assertSame "should be a valid caifs structure" "0" "$rc"
+    
+    is_valid_caifs_structure "target3"
+    rc=$?
+    assertSame "should be a valid caifs structure" "0" "$rc"
+
+    is_valid_caifs_structure "target4"
+    rc=$?
+    assertSame "should NOT be a valid caifs structure" "1" "$rc"
+}
+
+test_files_in_dir() {
+    _paths="target1/config/.local/bin/test"
+    _paths="$_paths target1/config/.local/share/file.txt"
+    _paths="$_paths target1/config/.local/bin/test2"
+    _paths="$_paths target1/hooks/post.sh"
+    expected_files=3
+    
+    for c in $_paths; do
+        _touchpath "$c"
+    done
+
+    file_count=0
+    for f in $(files_in_dir "target1/config/"); do
+        file_count=$((file_count+1))
+    done
+    assertSame "Number of config files should be $expected_files" "$expected_files" "$file_count"
+}
 
 . ./shunit2/shunit2
