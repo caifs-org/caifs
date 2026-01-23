@@ -132,16 +132,18 @@ get_run_targets() {
 # iterate over the standard collection path and discovers installed collections
 # each collection is added to the variable in order, apart from caifs-common which is always last
 # If CAIFS_COLLECTION is non-empty, do nothing. Otherwise populate with auto found
-# shellcheck disable=SC2045
 populate_caifs_collections() {
 
     LOCAL_COLLECTION_DIR=$(strip_trailing "$LOCAL_COLLECTION_DIR")
     log_debug "populate_caifs_collections: BEGIN"
-    for collection_dir in $(ls -d "${LOCAL_COLLECTION_DIR}"/*); do
+    for collection_dir in "${LOCAL_COLLECTION_DIR}"/*; do
         collection_name=$(basename "$collection_dir")
-        log_debug "Adding $collection_name in ${LOCAL_COLLECTION_DIR}"
-        [ "$collection_name" != "caifs-common" ] || continue
-        CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$collection_dir"
+
+        if [ -d "$collection_dir" ] && [ "$collection_name" != "caifs-common" ]; then
+            log_debug "Adding $collection_name in ${LOCAL_COLLECTION_DIR}"
+            CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$collection_dir"
+        fi
+
     done
 
     # Finally add the caifs-common lib to the end
