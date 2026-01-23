@@ -129,6 +129,12 @@ get_run_targets() {
     echo "$RUN_TARGETS"
 }
 
+# returns a loopable string of files found within the supplied directory
+# $1: The directory to search
+files_in_dir() {
+    find "${1}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null
+}
+
 # iterate over the standard collection path and discovers installed collections
 # each collection is added to the variable in order, apart from caifs-common which is always last
 # If CAIFS_COLLECTION is non-empty, do nothing. Otherwise populate with auto found
@@ -388,10 +394,8 @@ is_target_linked() {
     target_directory="$(config_directories "${collection_path}/${target}")"
     log_debug "using target_directory=$target_directory"
 
-    # TODO - is there a solution to this that is more POSIX compliant?
     for config_dir in $target_directory; do
-        # shellcheck disable=SC2044,SC2086
-        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+        for config_file in $(files_in_dir "$config_dir"); do
             dest_link="$link_root/$config_file"
             src_config_file="$config_dir/$config_file"
             log_debug "Checking if dest_link=$dest_link is linked to $src_config_file"
@@ -399,7 +403,7 @@ is_target_linked() {
             if [ -L "$dest_link" ]; then
                 # Verify the symlink points to our target
                 link_target=$(readlink "$dest_link")
-                if [ $link_target = $src_config_file ]; then
+                if [ "$link_target" = "$src_config_file" ]; then
                     log_debug "$src_config_file is -> $link_target"
                     return 0
                 fi
@@ -433,9 +437,7 @@ create_target_links() {
     log_debug "using target_directory=$target_directory"
 
     for config_dir in $target_directory; do
-        # TODO - is there a solution to this that is more POSIX compliant?
-        # shellcheck disable=SC2044
-        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+        for config_file in $(files_in_dir "$config_dir"); do
 
             log_debug "Processing $config_dir/$config_file"
 
@@ -496,10 +498,8 @@ remove_target_links() {
     # environments take priority to the standard 'config' one, which comes last in the find
     target_directory="$(config_directories "${collection_path}/${target}")"
 
-    # TODO - is there a solution to this that is more POSIX compliant?
-    # shellcheck disable=SC2044
     for config_dir in $target_directory; do
-        for config_file in $(find "${config_dir}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null); do
+        for config_file in $(files_in_dir "$config_dir"); do
             log_debug "Found ${config_dir}/${config_file}. Checking if link exists at $link_root/$config_file"
             if [ -L "$link_root/$config_file" ]; then
 
