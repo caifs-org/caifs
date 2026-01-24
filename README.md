@@ -188,6 +188,38 @@ Available function names:
 - `generic` - all platforms
 - `container` - runs when inside a container (Docker, Podman, LXC, etc.)
 
+### Shared hook library
+
+If your hooks share common functions, you can place them in a `lib.sh` file within the hooks directory. This file is
+automatically sourced before any hook script runs:
+
+```text
+my-target/
+└── hooks/
+    ├── lib.sh      # Sourced before any hook
+    ├── pre.sh      # Can use lib.sh functions
+    ├── post.sh     # Can use lib.sh functions
+    └── rm.sh       # Can use lib.sh functions
+```
+
+Example:
+
+``` shell
+# hooks/lib.sh
+install_my_tool() {
+    curl -sL https://example.com/install.sh | sh
+}
+
+# hooks/post.sh
+arch() {
+    install_my_tool
+}
+
+fedora() {
+    install_my_tool
+}
+```
+
 ### CA trust updates
 
 It's often common in enterprise setups to require a custom certificate to be installed to maintain the certificate

@@ -346,6 +346,12 @@ run_hook() {
         cd "${TMP_DIR}" || exit
 
         # shellcheck disable=SC1090
+        # source common lib if present
+        if [ -f "$collection_path/$target/$HOOKS_DIR/lib.sh" ]; then
+            . "$collection_path/$target/$HOOKS_DIR/lib.sh"
+        fi
+
+        # shellcheck disable=SC1090
         # import the hook script functions
         . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
