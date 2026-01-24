@@ -206,17 +206,20 @@ Example:
 
 ``` shell
 # hooks/lib.sh
-install_my_tool() {
-    curl -sL https://example.com/install.sh | sh
+install_power_management() {
+    if is_laptop; then
+        rootdo systemctl enable tlp
+    fi
+}
+
+# hooks/pre.sh
+arch() {
+    rootdo pacman -S --noconfirm tlp
 }
 
 # hooks/post.sh
-arch() {
-    install_my_tool
-}
-
-fedora() {
-    install_my_tool
+linux() {
+    install_power_management
 }
 ```
 
