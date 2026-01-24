@@ -263,11 +263,11 @@ is_wsl() {
     return 1
 }
 
-# Detects if running on a laptop
-# Returns 0 if a laptop, 1 otherwise
-is_laptop() {
-    if [ -n "$CAIFS_IS_LAPTOP" ]; then
-        if [ "$CAIFS_IS_LAPTOP" = "0" ]; then
+# Detects if running on a portable device (laptop, notebook, convertible, etc.)
+# Returns 0 if portable, 1 otherwise
+is_portable() {
+    if [ -n "$CAIFS_IS_PORTABLE" ]; then
+        if [ "$CAIFS_IS_PORTABLE" = "0" ]; then
             return 0
         else
             return 1
@@ -357,6 +357,7 @@ config_directories() {
 
     is_wsl && config_directories="${path_prefix}/config_wsl $config_directories"
     is_container && config_directories="${path_prefix}/config_container $config_directories"
+    is_portable && config_directories="${path_prefix}/config_portable $config_directories"
     echo "$config_directories"
 }
 

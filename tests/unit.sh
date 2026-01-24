@@ -82,16 +82,16 @@ test_is_container() {
     assertTrue "Test should be forced to result in true using CAIFS_IN_CONTAINER" "[ $rc -eq 0  ]"
 }
 
-test_is_laptop() {
-    CAIFS_IS_LAPTOP=1
-    is_laptop
+test_is_portable() {
+    CAIFS_IS_PORTABLE=1
+    is_portable
     rc="$?"
-    assertTrue "Test should not be a laptop when CAIFS_IS_LAPTOP=1" "[ $rc -ne 0  ]"
+    assertTrue "Test should not be portable when CAIFS_IS_PORTABLE=1" "[ $rc -ne 0  ]"
 
-    CAIFS_IS_LAPTOP=0
-    is_laptop
+    CAIFS_IS_PORTABLE=0
+    is_portable
     rc="$?"
-    assertTrue "Test should be forced to result in true using CAIFS_IS_LAPTOP=0" "[ $rc -eq 0  ]"
+    assertTrue "Test should be forced to result in true using CAIFS_IS_PORTABLE=0" "[ $rc -eq 0  ]"
 }
 
 # Ensure stripping the first char from a string, returns the original string, sans first char
@@ -154,23 +154,34 @@ test_config_directories() {
 
     CAIFS_IN_CONTAINER=1
     CAIFS_IN_WSL=1
+    CAIFS_IS_PORTABLE=1
 
     config_dirs=$(config_directories "$prefix_path")
-    assertSame "Not in container or WSL should only be a single config path" "$config_dirs" "$prefix_path/config"
+    assertSame "Not in container, WSL, or portable should only be a single config path" "$config_dirs" "$prefix_path/config"
 
     CAIFS_IN_CONTAINER=1
     CAIFS_IN_WSL=0
+    CAIFS_IS_PORTABLE=1
 
     config_dirs=$(config_directories "$prefix_path")
 
-    assertSame "Not in container, but in WSL should be wsl and config path" "$prefix_path/config_wsl $prefix_path/config" "$config_dirs"
+    assertSame "Not in container or portable, but in WSL should be wsl and config path" "$prefix_path/config_wsl $prefix_path/config" "$config_dirs"
 
     CAIFS_IN_CONTAINER=0
     CAIFS_IN_WSL=1
+    CAIFS_IS_PORTABLE=1
 
     config_dirs=$(config_directories "$prefix_path")
 
-    assertSame "In container but not in WSL should be a container and config path" "$prefix_path/config_container $prefix_path/config" "$config_dirs"
+    assertSame "In container but not in WSL or portable should be a container and config path" "$prefix_path/config_container $prefix_path/config" "$config_dirs"
+
+    CAIFS_IN_CONTAINER=1
+    CAIFS_IN_WSL=1
+    CAIFS_IS_PORTABLE=0
+
+    config_dirs=$(config_directories "$prefix_path")
+
+    assertSame "Portable only should be portable and config path" "$prefix_path/config_portable $prefix_path/config" "$config_dirs"
 
 }
 
