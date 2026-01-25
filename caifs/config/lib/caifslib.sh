@@ -711,7 +711,7 @@ gitlab_latest_tag() {
 install_certs() {
     for cert in "${LOCAL_CERT_DIR}"/*; do
         cert_name=$(basename "$cert")
-        log_info "Importing CA $cert_name for ${OS_TYPE}/${OS_ID}"
+        log_info "Importing CA '$cert_name' for ${OS_TYPE}/${OS_ID}"
         case "$OS_TYPE" in
             Linux)
                 check_and_exec_function "${OS_ID}_cert_handler" "$cert_name" "$LOCAL_CERT_DIR"
