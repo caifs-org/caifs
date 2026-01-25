@@ -189,6 +189,7 @@ Available function names:
 - `macos` - macOS/Darwin
 - `generic` - all platforms
 - `container` - runs when inside a container (Docker, Podman, LXC, etc.)
+- `portable` - runs when on a portable device (laptop, notebook, etc.)
 
 ### CA trust updates
 
@@ -358,17 +359,18 @@ RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
       -d /usr/local/share/my-docker-collection
 ```
 
-#### WSL or Container specific configuration
+#### WSL, Container, or Portable specific configuration
 
-Besides the standard `<target>/config` directory, CAIFS caters for WSL or Container environment specific config. To
-enable a specifc set of configuration that should only linked in a WSL environment, then provide an alternative
-directory named `<target>/config_wsl`.
+Besides the standard `<target>/config` directory, CAIFS caters for environment-specific config. To enable a specific set
+of configuration that should only be linked in a particular environment, provide an alternative directory:
 
-Similarly for container environments, provide an alternative directory named `<target>/config_container`.
+- `<target>/config_wsl` - for WSL environments
+- `<target>/config_container` - for container environments (Docker, Podman, LXC, etc.)
+- `<target>/config_portable` - for portable devices (laptops, notebooks, convertibles, etc.)
 
 > [!NOTE]
-> The order of precedence for multiple config directories is `config_container/`, `config_wsl/`, `config/`.
-> This effectively allows you to prevent container specific configuration from being clobbered by similarly named configuration
+> The order of precedence for multiple config directories is `config_portable/`, `config_container/`, `config_wsl/`, `config/`.
+> This effectively allows you to prevent environment-specific configuration from being clobbered by similarly named configuration
 > within the main `config/` directory.
 
 ### Command Options
