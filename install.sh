@@ -7,6 +7,8 @@ LATEST_VERSION=$(curl -sL https://api.github.com/repos/caifs-org/caifs/releases/
 
 curl -sL https://github.com/caifs-org/caifs/releases/download/v"$LATEST_VERSION"/release.tar.gz | tar zxf -
 
+mkdir -p "$INSTALL_PREFIX"
+
 cp -r caifs/config/bin "$INSTALL_PREFIX"
 cp -r caifs/config/lib "$INSTALL_PREFIX"
 
