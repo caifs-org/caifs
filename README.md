@@ -36,7 +36,6 @@ Running the equivalent in a docker file, after a bootstrap gives you consistency
 FROM debian:trixie-slim
 
 RUN curl -sL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/install.sh | sh && \
-    caifs add caifs-common -d . && \
     caifs add docker-cli  --hooks
 
 # Your other docker image build
@@ -52,7 +51,6 @@ Simplified dependency management in a GitHub Pipeline
     - name: Add the dependencies to the runner
       run: |
         curl -sL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/install.sh | sh
-        caifs add caifs-common
         caifs add uv ruff pre-commit rumdl docker-cli trivy just
 
     - name: Run pre-commit checks
@@ -97,12 +95,16 @@ git clone https://github.com/caifs-org/caifs/caifs.git
 
 ### Enable caifs-common collection (optional but recommended)
 
-(caifs-common)<https://github.com/caifs-org/caifs-common> is a collection of curated installs of commonly used developer
+<https://github.com/caifs-org/caifs-common> is a collection of curated installs of commonly used developer
 software that can be enabled via the caifs library.
 
+If you have installed caifs via the install.sh script, then you already have caifs-common installed
+
+If are installing caifs via the git clone method, then you can simply run the caifs-common target
+
 ```shell
-caifs add caifs
-caifs add caifs-common -d . 
+caifs add caifs -d .
+caifs add caifs-common -d .
 ```
 
 This will grab the latest `caifs-common` release and place it into `~/.local/share/caifs-collections/caifs-common` CAIFS
@@ -351,7 +353,6 @@ COPY my-docker-collection /usr/local/share/my-docker-collection
 # install some software and add the config from a custom collection, but
 # create the links at the link-root of /app/
 RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
-    caifs add -d . caifs-common && \
     caifs add uv git pre-commit ruff \
       --link-root /app \
       -d /usr/local/share/my-docker-collection

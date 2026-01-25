@@ -36,7 +36,7 @@ bump-version $patch="" $minor="" $major="" *args:
     bump-my-version bump $patch $minor $major {{ args }}
 
 create-release-tar:
-    tar -czvf release.tar.gz caifs/ caifs-common/
+    tar -czvf release.tar.gz caifs/
 
 [doc('List contents of release tarball')]
 [script]
