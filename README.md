@@ -1,4 +1,4 @@
-# Config And Installers For Software - CAIFS v(0.6.0)
+# Config And Installers For Software - CAIFS v(0.6.1)
 
 CAIFS is a tool to handle installing software across various unix-like operating systems. If you work with multiple
 flavours of linux, build docker containers and work with macs, then this tool will help you consistently install
