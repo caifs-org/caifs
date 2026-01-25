@@ -100,12 +100,12 @@ test_strip_trailing_char() {
     set_verbose 0
     str_with_slash="hello/slashy/path/"
     str_without_slash="hello/no-slashy/path"
-    
+
     stripped_string=$(strip_trailing "$str_with_slash")
 
     assertNotSame "String $str_with_slash should not match after strip $stripped_string" "$str_with_slash" "$stripped_string"
     assertSame "String should match when the first ^ char is added back" "$str_with_slash" "$stripped_string/"
-    
+
     stripped_string=$(strip_trailing "$str_without_slash")
     assertSame "String $str_without_slash should match after strip $stripped_string" "$str_without_slash" "$stripped_string"
 }
@@ -193,7 +193,7 @@ test_is_root_config() {
     is_root_config "$root_path"
     rc=$?
     assertSame "Root path $root_path should be considered a root path" "0" "$rc"
-    
+
     is_root_config "$local_path"
     rc=$?
     assertSame "Local path $local_path should NOT be considered a root path" "1" "$rc"
@@ -208,7 +208,7 @@ test_has_config() {
     for c in $_paths; do
         _touchpath "$c"
     done
-    
+
     has_config "target1"
     rc=$?
     assertSame "should return true" "0" "$rc"
@@ -234,11 +234,11 @@ test_valid_caifs_structure() {
     _paths="$_paths target3/config/.local/bin/test"
     _paths="$_paths target3/hooks/post.sh"
     _paths="$_paths target4/hooks/random.sh"
-    
+
     for c in $_paths; do
         _touchpath "$c"
     done
-    
+
     is_valid_caifs_structure "target1"
     rc=$?
     assertSame "should be a valid caifs structure" "0" "$rc"
@@ -246,7 +246,7 @@ test_valid_caifs_structure() {
     is_valid_caifs_structure "target2"
     rc=$?
     assertSame "should be a valid caifs structure" "0" "$rc"
-    
+
     is_valid_caifs_structure "target3"
     rc=$?
     assertSame "should be a valid caifs structure" "0" "$rc"
@@ -262,7 +262,7 @@ test_files_in_dir() {
     _paths="$_paths target1/config/.local/bin/test2"
     _paths="$_paths target1/hooks/post.sh"
     expected_files=3
-    
+
     for c in $_paths; do
         _touchpath "$c"
     done
@@ -272,6 +272,10 @@ test_files_in_dir() {
         file_count=$((file_count+1))
     done
     assertSame "Number of config files should be $expected_files" "$expected_files" "$file_count"
+}
+
+test_cert_handler() {
+    :
 }
 
 . ./shunit2/shunit2

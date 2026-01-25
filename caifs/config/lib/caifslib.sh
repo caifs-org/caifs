@@ -710,13 +710,14 @@ gitlab_latest_tag() {
 # Installs previously linked certificiates from $LOCAL_CERT_DIR into the specific trust chain of the current OS
 install_certs() {
     for cert in "${LOCAL_CERT_DIR}"/*; do
-        log_info "Importing CA for ${OS_TYPE}/${OS_ID}"
+        cert_name=$(basename "$cert")
+        log_info "Importing CA $cert_name for ${OS_TYPE}/${OS_ID}"
         case "$OS_TYPE" in
             Linux)
-                check_and_exec_function "${OS_ID}_cert_handler" "$cert" "$LOCAL_CERT_DIR"
+                check_and_exec_function "${OS_ID}_cert_handler" "$cert_name" "$LOCAL_CERT_DIR"
                 ;;
             Darwin)
-                check_and_exec_function "macos_cert_handler" "$cert" "$LOCAL_CERT_DIR"
+                check_and_exec_function "macos_cert_handler" "$cert_name" "$LOCAL_CERT_DIR"
                 ;;
             *)
                 log_error "Not a support OS - ${OS_TYPE}"
