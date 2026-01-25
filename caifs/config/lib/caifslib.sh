@@ -713,10 +713,10 @@ install_certs() {
         log_info "Importing CA for ${OS_TYPE}/${OS_ID}"
         case "$OS_TYPE" in
             Linux)
-                check_and_exec_function "${OS_ID}_cert_installer" "$cert" "$LOCAL_CERT_DIR"
+                check_and_exec_function "${OS_ID}_cert_handler" "$cert" "$LOCAL_CERT_DIR"
                 ;;
             Darwin)
-                check_and_exec_function "macos_cert_installer" "$cert" "$LOCAL_CERT_DIR"
+                check_and_exec_function "macos_cert_handler" "$cert" "$LOCAL_CERT_DIR"
                 ;;
             *)
                 log_error "Not a support OS - ${OS_TYPE}"
@@ -730,26 +730,26 @@ install_certs() {
 
 # $1: cert name
 # $2: location directory of cert $1
-arch_cert_hander() {
-    rootdo cp "$2/$1" "/etc/ca-certificates/trust-source/anchors/${1}.pem"
-    rootdo update-ca-trust
+arch_cert_handler() {
+    dry_or_exec rootdo cp "$2/$1" "/etc/ca-certificates/trust-source/anchors/${1}.pem"
+    dry_or_exec rootdo update-ca-trust
 }
 
 # $1: cert name
 # $2: location directory of cert $1
 rhel_cert_handler() {
-    rootdo cp "$2/$1" "/etc/pki/ca-trust/source/anchors/${1}.pem"
-    rootdo update-ca-trust
+    dry_or_exec rootdo cp "$2/$1" "/etc/pki/ca-trust/source/anchors/${1}.pem"
+    dry_or_exec rootdo update-ca-trust
 }
 
 # $1: cert name
 # $2: location directory of cert $1
 debian_cert_handler() {
-    rootdo cp "$2/$1" "/usr/local/share/ca-certificates/${1}.crt"
-    rootdo update-ca-certificates
+    dry_or_exec rootdo cp "$2/$1" "/usr/local/share/ca-certificates/${1}.crt"
+    dry_or_exec rootdo update-ca-certificates
 }
 
-steamos_cert_hander() {
+steamos_cert_handler() {
     arch_cert_handler "$@"
 }
 
