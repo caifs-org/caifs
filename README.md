@@ -267,6 +267,49 @@ caifs rm git -d ~/my-dotfiles --hooks
 
 ## Advanced Configuration
 
+### SUDO requirements
+
+Configuring `sudo` is generally recommended for ease of use, especially when working with docker containers. The default
+in WSL2 is something akin to `echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers`
+
+This is fine for a dedicated local dev machine, but if you working with containers then you might want to restrict that.
+
+Depending on your distro of choice, CAIFS requires the following for `sudo` access
+
+| command                | distro           | justification                            |
+|------------------------|------------------|------------------------------------------|
+| cp                     | all              | Moving files into root locations         |
+| ln                     | all              | creating links to root locations         |
+| mkdir                  | all              | creating parent directories for symlinks |
+| update-ca-certificates | debian/ubuntu    | adding certificates to the trust store   |
+| update-ca-trust        | fedora/rhel/arch | adding certificates to the trust store   |
+| apt-get/apt            | debian/ubuntu    | install packages                         |
+| pacman/yay             | arch/steamos     | install packages                         |
+| dnf/rpm                | rhel/fedora      | install packages                         |
+
+A simple entry for the set of these on debian might look something like:
+
+```shell
+echo '%sudo ALL=(ALL) NOPASSWD:/usr/bin/apt, \
+    /usr/bin/apt-get, \
+    /usr/bin/cp, \
+    /usr/bin/ln, \
+    /usr/bin/update-ca-certificates' >> /etc/sudoers
+```
+
+Or using a `sudoers.d` file
+
+``` shell
+# /etc/sudoers.d/caifs
+
+%sudo ALL=(ALL) NOPASSWD:/usr/bin/apt, \
+    /usr/bin/apt-get, \
+    /usr/bin/mkdir, \
+    /usr/bin/cp, \
+    /usr/bin/ln, \
+    /usr/bin/update-ca-certificates
+```
+
 ### Define multiple collections
 
 Enabling multiple collections allows you to separate out your personal (and preferred) configuration into one collection

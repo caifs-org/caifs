@@ -349,6 +349,7 @@ run_hook() {
         # import the hook script functions
         . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
+        log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
         run_hook_functions
 
         cd - || exit
@@ -789,7 +790,6 @@ caifs_install() {
 # *_install functions are considered hooks, and should be developed per pre.sh or post.sh script as
 # required
 run_hook_functions() {
-    log_info "Running $SCRIPT_ACTION hook for $SCRIPT_GROUP on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
 
     case "$OS_TYPE" in
         Linux)
