@@ -722,7 +722,10 @@ npm_install() {
     if [ -n "$PACKAGE_VERSION" ]; then
         PACKAGE="${PACKAGE}@${PACKAGE_VERSION}"
     fi
-    npm install --global "$PACKAGE $*"
+
+    # npm has a bug where trailing spaces after the package name get added to the package
+    # so we smoosh the trailing args up tight with the package name
+    npm install --global "${PACKAGE}$*"
 }
 
 # Removes a managed package via npm
