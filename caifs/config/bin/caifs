@@ -313,8 +313,15 @@ cmd_add() {
 
         log_debug "Working with $caifs_collection"
 
-        for target in $run_targets; do
-            log_debug "$target"
+        for t in $run_targets; do
+            target=$(get_target "$t")
+            collection=$(get_collection "$t")
+            log_debug "target sanitised to $target from $t and collection specified as $collection"
+
+            if ! valid_for_collection_path "$collection" "$caifs_collection"; then
+                log_info "collection '$collection' not valid for current caifs collection path '$caifs_collection' - skipping"
+                continue
+            fi
 
             run_pre_hook "${caifs_collection}" "$target"
 

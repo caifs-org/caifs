@@ -135,6 +135,56 @@ files_in_dir() {
     find "${1}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null
 }
 
+# Splits a string at a desired character and returns the portion before the character
+# returns the original string if no match found
+# $1: string to search
+# $2: optional charactor default @
+str_before_char() {
+    sep=${2:-'@'}
+    echo "${1%"$sep"*}"
+}
+
+# Splits a string at a desired character and returns the portion before the character
+# Returns the original string if no match found
+# $1: string to search
+# $2: optional charactor default @
+str_after_char() {
+    sep=${2:-'@'}
+    echo "${1#*"$sep"}"
+}
+
+# Gets an optional collection name from a target specifier, of the form target@<collection name>
+# Returns empty if nothing found
+# $1: the target specifier string
+get_collection() {
+    collection=$(str_after_char "$1" "@")
+    if [ "$collection" = "$1" ]; then
+        # original string returned, meaning no collection specified. Return an empty string
+        collection=""
+    fi
+    echo "$collection"
+}
+
+# Gets the target name from a target specifier, of the form target@<collection name>
+# $1: the target specifier string
+get_target() {
+    str_before_char "$1" "@"
+}
+
+# Validates that specified target is good to run against supplied collection
+# If no collection is supplied, then function will return true
+# $1: The collection specified as part of the target argument
+# $2: collection_path
+valid_for_collection_path() {
+    collection_name=$(basename "$2")
+
+    if [ "$1" = "$collection_name" ] || [ -z "$1" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # iterate over the standard collection path and discovers installed collections
 # each collection is added to the variable in order, apart from caifs-common which is always last
 # If CAIFS_COLLECTION is non-empty, do nothing. Otherwise populate with auto found
