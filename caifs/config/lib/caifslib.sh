@@ -31,7 +31,7 @@ log_error() {
 ## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
 # By default, run both links and hooks
 # shellcheck disable=SC2034
-VERSION=0.6.2
+CAIFS_VERSION=0.6.2
 
 HOOKS_DIR=hooks
 
@@ -53,6 +53,9 @@ DRY_RUN=${CAIFS_DRY_RUN:-1}
 
 # A list of directories to interogate for caifs collections
 CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:-""}
+
+# This could be exposed as an ENV var in the future, but it might be confusing with the above
+COLLECTION_CONSTRAINT=""
 
 # The root directory of where config should link to. By default it should be home, but for root scenarios
 # this can be overridden
@@ -129,10 +132,75 @@ get_run_targets() {
     echo "$RUN_TARGETS"
 }
 
+set_collection_constraint() {
+    COLLECTION_CONSTRAINT=$1
+}
+
+get_collection_constraint() {
+    echo "$COLLECTION_CONSTRAINT"
+}
+
 # returns a loopable string of files found within the supplied directory
 # $1: The directory to search
 files_in_dir() {
     find "${1}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null
+}
+
+# Splits a string at a desired character and returns the portion before the character
+# returns the original string if no match found
+# $1: string to search
+# $2: optional charactor default @
+str_before_char() {
+    sep=${2:-'@'}
+    echo "${1%"$sep"*}"
+}
+
+# Splits a string at a desired character and returns the portion after the character
+# Returns the original string if no match found
+# $1: string to search
+# $2: optional charactor default @
+str_after_char() {
+    sep=${2:-'@'}
+    echo "${1#*"$sep"}"
+}
+
+# Returns the first char of a string
+# $1: the string to search
+first_char() {
+    echo "${1%"${1#?}"}"
+}
+
+# Gets an optional collection name from a target specifier, of the form target@<collection name>
+# Returns empty if nothing found
+# $1: the target specifier string
+get_collection() {
+    collection=$(str_after_char "$1" "@")
+    if [ "$collection" = "$1" ]; then
+        # original string returned, meaning no collection specified. Return an empty string
+        collection=""
+    fi
+    echo "$collection"
+}
+
+# Gets the target name from a target specifier, of the form target@<collection name>
+# $1: the target specifier string
+get_target() {
+    str_before_char "$1" "@"
+}
+
+# Validates that specified target is good to run against supplied collection
+# If no collection is supplied, then function will return true
+# $1: The collection specified as part of the target argument
+# $2: collection_path
+valid_for_collection_path() {
+    collection_name=$(basename "$2")
+
+    log_debug "valid_for_collection_path: 1=$1, 2=$2, collection_name=$collection_name"
+    if [ "$1" = "$collection_name" ] || [ -z "$1" ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # iterate over the standard collection path and discovers installed collections
@@ -147,7 +215,11 @@ populate_caifs_collections() {
 
         if [ -d "$collection_dir" ] && [ "$collection_name" != "caifs-common" ]; then
             log_debug "Adding $collection_name in ${LOCAL_COLLECTION_DIR}"
-            CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$collection_dir"
+            if [ -n "$CAIFS_COLLECTIONS" ]; then
+                CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$collection_dir"
+            else
+                CAIFS_COLLECTIONS="$collection_dir"
+            fi
         fi
 
     done
@@ -156,7 +228,7 @@ populate_caifs_collections() {
     if [ -d "$LOCAL_COLLECTION_DIR/caifs-common" ]; then
         CAIFS_COLLECTIONS="$CAIFS_COLLECTIONS:$LOCAL_COLLECTION_DIR/caifs-common"
     fi
-    log_debug "populate_caifs_collections: END"
+    log_debug "populate_caifs_collections: $CAIFS_COLLECTIONS - END"
 }
 
 # Runs a command, if the DRY_RUN setting is not in effect
@@ -376,9 +448,12 @@ run_hook() {
         return 0
     fi
 
-    log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ] && [ "$DRY_RUN" -eq 0 ]; then
+        log_info "DRY-RUN: Would have run ${hook_type}-hook for target '$target' in collection $collection_path"
 
-    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
+    elif [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
+        log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+
         TMP_DIR=$(mktemp -d)
         cd "${TMP_DIR}" || exit
 

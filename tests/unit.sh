@@ -301,4 +301,71 @@ test_cert_handler() {
     :
 }
 
+test_str_splitting() {
+    var="target@collection"
+    split=$(str_before_char "$var")
+    assertSame "String should match target" "target" "$split"
+
+    split=$(str_after_char "$var")
+    assertSame "String should match collection" "collection" "$split"
+
+
+    var="target"
+    split=$(str_before_char "$var")
+    assertSame "No collection specified, so target should be returned" "target" "$split"
+
+    split=$(str_after_char "$var")
+    assertSame "No collection specified, so target should be returned" "target" "$split"
+
+    var="@collection"
+    split=$(str_before_char "$var")
+    assertSame "No target specified, but the collection is, should return empty" "" "$split"
+
+    split=$(str_after_char "$var")
+    assertSame "No target specified, but the collection is, should return collection" "collection" "$split"
+}
+
+test_target_and_collection() {
+
+    target1="ruff@python-utils"
+    target2="ruff"
+
+    t=$(get_target "$target1")
+    c=$(get_collection "$target1")
+
+    assertSame "Target should be ruff" "ruff" "$t"
+    assertSame "Collection should be python-utils" "python-utils" "$c"
+
+    t=$(get_target "$target2")
+    c=$(get_collection "$target2")
+
+    assertSame "Target should be ruff" "ruff" "$t"
+    assertSame "Collection should be empty" "" "$c"
+}
+
+test_valid_for_collection_path() {
+
+    collection="my-collection"
+    collection_path="/path/my-collection"
+
+    valid_for_collection_path "$collection" "$collection_path"
+    rc=$?
+    assertSame "collection $collection should be valid for $collection_path" "0" "$rc"
+
+    collection_path="/path/my-collection2"
+    valid_for_collection_path "$collection" "$collection_path"
+    rc=$?
+    assertSame "collection $collection should NOT be valid for $collection_path" "1" "$rc"
+}
+
+test_first_char() {
+    str="*"
+    char=$(first_char "$str")
+    assertSame "First character of $str should be *" "*" "$char"
+
+    str="*@hello"
+    char=$(first_char "$str")
+    assertSame "First character of $str should be *" "*" "$char"
+}
+
 . ./shunit2/shunit2

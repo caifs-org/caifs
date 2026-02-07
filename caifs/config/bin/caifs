@@ -7,6 +7,7 @@ BINDIR=$(dirname "$0")
 
 # Expand '*' to all targets in the collections
 # Uses get_collection_paths() and sets run_targets via set_run_targets()
+# $1: An optional explicit collection that was applied to '*@explicit-collection'
 expand_wildcard_targets() {
     expanded_targets=""
     collection_paths="$(get_collection_paths)"
@@ -21,6 +22,11 @@ expand_wildcard_targets() {
 
                 # Only include if it has a valid caifs structure
                 is_valid_caifs_structure "$target_dir" || continue
+
+                # If we have a explict collection, add it on to the target explicitly
+                if [ -n "$1"  ]; then
+                    target="${target}@${1}"
+                fi
 
                 # Add to list if not already present
                 case " $expanded_targets " in
@@ -128,14 +134,14 @@ main() {
         exit 0
     fi
     if [ "$SUBCOMMAND" = "--version" ]; then
-        echo "$VERSION"
+        echo "$CAIFS_VERSION"
         exit 0
     fi
 
     case "$SUBCOMMAND" in
         add)
             # Parse 'run' specific options
-            SUB_TEMP=$(getopt -o r:nflhd: -l link-root:,dry-run,force,links,hooks,directory: -n "run" -- "$@")
+            SUB_TEMP=$(getopt -o r:nflhd:c: -l link-root:,dry-run,force,links,hooks,directory:,collection: -n "run" -- "$@")
             # shellcheck disable=SC2181
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
@@ -156,6 +162,7 @@ main() {
                         ;;
                     -n|--dry-run) set_dry_run 0; shift ;;
                     -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
+                    -c|--collection) set_collection_constraint "$2"; shift 2;;
                     -f|--force) set_force 0; shift ;;
                     --) shift; break ;;
                     *) break ;;
@@ -172,15 +179,16 @@ main() {
 
             set_run_targets "$*"
 
-            # Expand wildcard to all targets
-            if [ "$(get_run_targets)" = "*" ]; then
-                expand_wildcard_targets
+            # Expand wildcard to all targets, if the wildcard contains an explicit collection reference
+            # Then apply that collection to all targets
+            if [ "$(first_char "$(get_run_targets)")" = "*" ]; then
+                expand_wildcard_targets "$(get_collection "$(get_run_targets)")"
             fi
 
             cmd_add "$(get_collection_paths)" "$(get_run_targets)" "$(get_link_root)"
             ;;
         rm)
-            SUB_TEMP=$(getopt -o r:nlhd: -l link-root:,dry-run,links,hooks,directory: -n "rm" -- "$@")
+            SUB_TEMP=$(getopt -o r:nlhd:c: -l link-root:,dry-run,links,hooks,directory:,collection: -n "rm" -- "$@")
             # shellcheck disable=SC2181
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
@@ -200,6 +208,7 @@ main() {
                     -h|--hooks) set_run_links 1; shift ;;
                     -n|--dry-run) set_dry_run 0; shift ;;
                     -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
+                    -c|--collection) set_collection_constraint "$2"; shift 2;;
                     --) shift; break ;;
                     *) break ;;
                 esac
@@ -213,15 +222,16 @@ main() {
             fi
             set_run_targets "$*"
 
-            # Expand wildcard to all targets
-            if [ "$(get_run_targets)" = "*" ]; then
-                expand_wildcard_targets
+            # Expand wildcard to all targets, if the wildcard contains an explicit collection reference
+            # Then apply that collection to all targets
+            if [ "$(first_char "$(get_run_targets)")" = "*" ]; then
+                expand_wildcard_targets "$(get_collection_constraint "$(get_run_targets)")"
             fi
 
             cmd_remove "$(get_collection_paths)" "$(get_run_targets)" "$(get_link_root)"
             ;;
         status)
-            SUB_TEMP=$(getopt -o r:d: -l link-root:,directory: -n "status" -- "$@")
+            SUB_TEMP=$(getopt -o r:d:c: -l link-root:,directory:,collection: -n "status" -- "$@")
             # shellcheck disable=SC2181
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
@@ -238,6 +248,7 @@ main() {
                         shift 2
                         ;;
                     -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
+                    -c|--collection) set_collection_constraint "$2"; shift 2;;
                     --) shift; break ;;
                     *) break ;;
                 esac
@@ -276,14 +287,18 @@ cmd_remove() {
 
         log_debug "Working with $caifs_collection"
 
-        for target in $run_targets; do
-            log_debug "$target"
+        # Cater for the --collection argument
+        if valid_for_collection_path "$(get_collection_constraint)" "$caifs_collection"; then
+            for target in $run_targets; do
+                log_debug "$target"
 
-            remove_target_links "${caifs_collection}" "${target}" "${link_root}"
-            run_remove_hook "${caifs_collection}" "$target"
+                remove_target_links "${caifs_collection}" "${target}" "${link_root}"
+                run_remove_hook "${caifs_collection}" "$target"
 
-        done
-            # Loop control, get the next path to operate on
+            done
+        fi
+
+        # Loop control, get the next path to operate on
         if [ "$caifs_collection" = "$collection_paths" ]; then
             # No more paths available. End the loop
             collection_paths=""
@@ -310,18 +325,28 @@ cmd_add() {
     while [ -n "$collection_paths" ]; do
 
         caifs_collection="${collection_paths%%:*}"
-
         log_debug "Working with $caifs_collection"
 
-        for target in $run_targets; do
-            log_debug "$target"
+        # Cater for the --collection argument
+        if valid_for_collection_path "$(get_collection_constraint)" "$caifs_collection"; then
 
-            run_pre_hook "${caifs_collection}" "$target"
+            for t in $run_targets; do
+                target=$(get_target "$t")
+                collection=$(get_collection "$t")
+                log_debug "target sanitised to $target from $t and collection specified as $collection"
 
-            create_target_links "${caifs_collection}" "${target}" "${link_root}"
+                if ! valid_for_collection_path "$collection" "$caifs_collection"; then
+                    log_debug "collection '$collection' not valid for current caifs collection path '$caifs_collection' - skipping"
+                    continue
+                fi
 
-            run_post_hook "${caifs_collection}" "$target"
-        done
+                run_pre_hook "${caifs_collection}" "$target"
+
+                create_target_links "${caifs_collection}" "${target}" "${link_root}"
+
+                run_post_hook "${caifs_collection}" "$target"
+            done
+        fi
 
         # Loop control, get the next path to operate on
         if [ "$caifs_collection" = "$collection_paths" ]; then
@@ -373,39 +398,42 @@ cmd_status() {
 
         log_debug "Checking collection: $caifs_collection"
 
-        # Find all targets (directories containing config/ or hooks/ subdirectory)
-        if [ -d "$caifs_collection" ]; then
-            for target_dir in "$caifs_collection"/*/; do
-                [ -d "$target_dir" ] || continue
-                target=$(basename "$target_dir")
+        # Cater for the --collection argument
+        if valid_for_collection_path "$(get_collection_constraint)" "$caifs_collection"; then
 
-                log_debug "Checking if target_dir=$target_dir contains a valid structure"
-                is_valid_caifs_structure "$target_dir" || continue
+            # Find all targets (directories containing config/ or hooks/ subdirectory)
+            if [ -d "$caifs_collection" ]; then
+                for target_dir in "$caifs_collection"/*/; do
+                    [ -d "$target_dir" ] || continue
+                    target=$(basename "$target_dir")
 
-                # Check linked status (pad for alignment, color for linked column only)
-                if has_config "$target_dir"; then
-                    log_debug "target_dir=$target_dir has config files"
-                    if is_target_linked "$caifs_collection" "$target" "$link_root"; then
-                        linked_status="${GREEN}${CHECK}${NC}       "
+                    log_debug "Checking if target_dir=$target_dir contains a valid structure"
+                    is_valid_caifs_structure "$target_dir" || continue
+
+                    # Check linked status (pad for alignment, color for linked column only)
+                    if has_config "$target_dir"; then
+                        log_debug "target_dir=$target_dir has config files"
+                        if is_target_linked "$caifs_collection" "$target" "$link_root"; then
+                            linked_status="${GREEN}${CHECK}${NC}       "
+                        else
+                            linked_status="${RED}${CROSS}${NC}       "
+                        fi
                     else
-                        linked_status="${RED}${CROSS}${NC}       "
+                        linked_status="${DASH}       "
                     fi
-                else
-                    linked_status="${DASH}       "
-                fi
 
-                # Check hooks status (has hooks/*.sh files)
-                if has_hooks "$target_dir"; then
-                    log_debug "target_dir=$target_dir has hooks"
-                    hooks_status="${CHECK}"
-                else
-                    hooks_status="${CROSS}"
-                fi
+                    # Check hooks status (has hooks/*.sh files)
+                    if has_hooks "$target_dir"; then
+                        log_debug "target_dir=$target_dir has hooks"
+                        hooks_status="${CHECK}"
+                    else
+                        hooks_status="${CROSS}"
+                    fi
 
-                printf "%-40s %-20s %b %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
-            done
+                    printf "%-40s %-20s %b %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
+                done
+            fi
         fi
-
         # Loop control
         if [ "$caifs_collection" = "$collection_paths" ]; then
             collection_paths=""
