@@ -61,3 +61,13 @@ install-caifs:
 [script]
 install-caifs-runner-deps:
     caifs add uv pre-commit rumdl --hooks
+
+[doc('Utility function to do a regex replacement on a string')]
+[script]
+replace-regex str regex replacement:
+    echo {{ replace_regex(str, regex, replacement) }}
+
+[doc('Utility function to do a regex replacement on a string')]
+[script]
+replace str from to:
+    echo {{ replace(str, from, to) }}

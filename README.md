@@ -43,6 +43,16 @@ RUN curl -sL https://raw.githubusercontent.com/caifs-org/caifs/refs/heads/main/i
 
 ```
 
+Alternatively, use the github image to simplify your docker builds
+
+``` Dockerfile
+FROM debian:trixie-slim
+
+COPY --from=ghcr.io/caifs-org/caifs:latest /caifs/ /usr/local/
+
+RUN caifs --version
+```
+
 Simplified dependency management in a GitHub Pipeline
 
 ``` yaml
@@ -247,6 +257,9 @@ caifs rm git -d ~/my-dotfiles --links
 
 # run remove hook script
 caifs rm git -d ~/my-dotfiles --hooks
+
+# run a target from a specific collection within your installed collections in ~/.local/share/caifs-collections/
+caifs add git@caifs-common fzf curl custom@my-dotfiles
 ```
 
 ## Environment Variables
@@ -418,10 +431,12 @@ of configuration that should only be linked in a particular environment, provide
 
 ### Command Options
 
-| Option            | Env Variable        | Description                                |
-|-------------------|---------------------|--------------------------------------------|
-| `--verbose`, `-v` | `CAIFS_VERBOSE=0`   | Show debug logs                            |
-| `--force`, `-f`   | `CAIFS_RUN_FORCE=0` | Remove existing links/files on conflict    |
-| `--links`, `-l`   | `CAIFS_RUN_LINKS=0` | Run only links, disable hooks              |
-| `--hooks`, `-h`   | `CAIFS_RUN_HOOKS=0` | Run only hooks, disable links              |
-| `--dry-run`, `-n` | `CAIFS_DRY_RUN=0`   | Show what would run without making changes |
+| Option               | Env Variable        | Description                                  |
+|----------------------|---------------------|----------------------------------------------|
+| `--verbose`, `-v`    | `CAIFS_VERBOSE=0`   | Show debug logs                              |
+| `--force`, `-f`      | `CAIFS_RUN_FORCE=0` | Remove existing links/files on conflict      |
+| `--links`, `-l`      | `CAIFS_RUN_LINKS=0` | Run only links, disable hooks                |
+| `--hooks`, `-h`      | `CAIFS_RUN_HOOKS=0` | Run only hooks, disable links                |
+| `--dry-run`, `-n`    | `CAIFS_DRY_RUN=0`   | Show what would run without making changes   |
+| `--collection`, `-c` | -                   | Constrain the targets to a single collection |
+|                      |                     |                                              |

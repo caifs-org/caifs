@@ -38,6 +38,17 @@ setUp() {
         i=$(($i+1))
     done
 
+    cat << EOF > $COLLECTION_BASE_DIR/dummy_0/git/hooks/pre.sh
+generic() {
+  touch ${COLLECTION_BASE_DIR}/generic_marker0.txt
+}
+
+linux() {
+  touch ${COLLECTION_BASE_DIR}/linux_marker0.txt
+}
+EOF
+
+
     #tree -a $COLLECTION_BASE_DIR
 }
 
@@ -165,5 +176,75 @@ test_wildcard_skips_invalid_targets() {
     assertTrue ".gitconfig should be linked" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
 }
 
+# A marker file should be created when hooks are run
+test_hooks() {
+    caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --hooks
+    assertTrue "A marker file should be present" "[ -f ${COLLECTION_BASE_DIR}/generic_marker0.txt ]"
+}
+
+
+# A marker file should not be created when hooks are run with dry-run mode
+test_hooks_dry_run() {
+
+    caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --hooks --dry-run
+    assertFalse "A marker file should NOT be present" "[ -f ${COLLECTION_BASE_DIR}/generic_marker0.txt ]"
+
+}
+
+# Test the --collection constraint
+# when normally run, the dummy_0 collection would usually run first, as it is first in order
+test_caifs_collection_constraint() {
+    # Override the CAIFS LOCAL COLLECTION var
+    CAIFS_LOCAL_COLLECTIONS=$COLLECTION_BASE_DIR caifs add git --collection dummy_1 --links
+
+    assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+
+    link=$(readlink "$CAIFS_LINK_ROOT/.gitconfig")
+
+    assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/git/config/.gitconfig" "$link"
+
+}
+
+# Test explicit @collection-constrain syntax
+test_caifs_explicit_constraint() {
+    CAIFS_LOCAL_COLLECTIONS=$COLLECTION_BASE_DIR caifs add git@dummy_1 bash@dummy_0 --links
+
+    assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+
+    link=$(readlink "$CAIFS_LINK_ROOT/.gitconfig")
+
+    assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/git/config/.gitconfig" "$link"
+
+
+    assertTrue ".bashrc should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.bashrc ]"
+
+    link=$(readlink "$CAIFS_LINK_ROOT/.bashrc")
+
+    assertEquals "Only dummy_0 should be linked" "$COLLECTION_BASE_DIR/dummy_0/bash/config/.bashrc" "$link"
+}
+
+test_wildcard_constraint() {
+    CAIFS_LOCAL_COLLECTIONS=$COLLECTION_BASE_DIR caifs add --collection dummy_1 '*' --links
+
+    assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+    link=$(readlink "$CAIFS_LINK_ROOT/.gitconfig")
+    assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/git/config/.gitconfig" "$link"
+
+    assertTrue ".bashrc should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.bashrc ]"
+    link=$(readlink "$CAIFS_LINK_ROOT/.bashrc")
+    assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/bash/config/.bashrc" "$link"
+}
+
+test_wildcard_explicit_constraint() {
+    CAIFS_LOCAL_COLLECTIONS=$COLLECTION_BASE_DIR caifs add '*@dummy_1' --links
+
+    assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
+    link=$(readlink "$CAIFS_LINK_ROOT/.gitconfig")
+    assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/git/config/.gitconfig" "$link"
+
+    assertTrue ".bashrc should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.bashrc ]"
+    link=$(readlink "$CAIFS_LINK_ROOT/.bashrc")
+    assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/bash/config/.bashrc" "$link"
+}
 
 . ./shunit2/shunit2
