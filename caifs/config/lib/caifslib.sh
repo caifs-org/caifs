@@ -36,7 +36,7 @@ CAIFS_VERSION=0.6.2
 HOOKS_DIR=hooks
 
 # Local directory for linking certificates into
-LOCAL_CERT_DIR=~/.local/share/certificates
+export LOCAL_CERT_DIR="$HOME/.local/share/certificates"
 LOCAL_COLLECTION_DIR=${CAIFS_LOCAL_COLLECTIONS:-"$HOME/.local/share/caifs-collections"}
 
 # Force the override of existing link targets
@@ -48,8 +48,8 @@ RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
 RUN_TARGETS=""
 
 # Multiple targets could be specified. We will run them in order
-VERBOSE=${CAIFS_VERBOSE:=1}
-DRY_RUN=${CAIFS_DRY_RUN:-1}
+export VERBOSE="${CAIFS_VERBOSE:=1}"
+export DRY_RUN="${CAIFS_DRY_RUN:-1}"
 
 # A list of directories to interogate for caifs collections
 CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:-""}
@@ -59,7 +59,7 @@ COLLECTION_CONSTRAINT=""
 
 # The root directory of where config should link to. By default it should be home, but for root scenarios
 # this can be overridden
-LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
+export LINK_ROOT="${CAIFS_LINK_ROOT:-$HOME}"
 
 # Source the OS type and export the most useful for being available in executed scripts
 export OS_TYPE=
@@ -453,19 +453,23 @@ run_hook() {
 
     elif [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
         log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+        # Run within a subshell, this has the benefit of any sourced script functions and variables
+        # do not pollute subsequent targets on the same run
+        (
+            export CAIFS_TARGET="$target"
+            TMP_DIR=$(mktemp -d)
+            cd "${TMP_DIR}" || exit
 
-        TMP_DIR=$(mktemp -d)
-        cd "${TMP_DIR}" || exit
+            # shellcheck disable=SC1090
+            # import the hook script functions
+            . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
-        # shellcheck disable=SC1090
-        # import the hook script functions
-        . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
+            log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
+            run_hook_functions
 
-        log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
-        run_hook_functions
-
-        cd - || exit
-        rm -rf "${TMP_DIR}"
+            cd - || exit
+            rm -rf "${TMP_DIR}"
+        )
     else
         log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
     fi
@@ -912,17 +916,12 @@ run_hook_functions() {
             check_and_exec_function "${OS_ID}"
 
             check_and_exec_function linux
-
-            unset -f "${OS_ID}" linux
             ;;
         Darwin)
             check_and_exec_function macos
-
-            unset -f macos darwin
             ;;
         *)
             log_error "Not a supported OS"
-
             # This is invoked directly, we can safely ignore it, as it does actually work
             # shellcheck disable=SC2317
             exit 1
@@ -931,12 +930,10 @@ run_hook_functions() {
 
     # perhaps there's a generic install for all operating systems. Eg uv
     check_and_exec_function generic
-    unset -f generic
 
     # Run container-specific hooks for cleanup, etc.
     if is_container; then
         log_debug "Container environment detected"
         check_and_exec_function container
-        unset -f container
     fi
 }
