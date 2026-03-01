@@ -201,6 +201,41 @@ Available function names:
 - `container` - runs when inside a container (Docker, Podman, LXC, etc.)
 - `portable` - runs when on a portable device (laptop, notebook, etc.)
 
+### Shared hook library
+
+If your hooks share common functions, you can place them in a `lib.sh` file within the hooks directory. This file is
+automatically sourced before any hook script runs:
+
+```text
+my-target/
+└── hooks/
+    ├── lib.sh      # Sourced before any hook
+    ├── pre.sh      # Can use lib.sh functions
+    ├── post.sh     # Can use lib.sh functions
+    └── rm.sh       # Can use lib.sh functions
+```
+
+Example:
+
+``` shell
+# hooks/lib.sh
+install_power_management() {
+    if is_laptop; then
+        rootdo systemctl enable tlp
+    fi
+}
+
+# hooks/pre.sh
+arch() {
+    rootdo pacman -S --noconfirm tlp
+}
+
+# hooks/post.sh
+linux() {
+    install_power_management
+}
+```
+
 ### CA trust updates
 
 It's often common in enterprise setups to require a custom certificate to be installed to maintain the certificate

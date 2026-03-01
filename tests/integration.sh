@@ -77,6 +77,31 @@ testHooksRunWithoutLinks() {
     assertTrue ".gitconfig should not be linked to root dir" "[ ! -L $CAIFS_LINK_ROOT/.gitconfig ]"
 }
 
+test_hooks_lib_sourced() {
+    # Create a target with lib.sh and post.sh
+    mkdir -p "$COLLECTION_BASE_DIR/dummy_0/libtest/hooks"
+    mkdir -p "$COLLECTION_BASE_DIR/dummy_0/libtest/config"
+    touch "$COLLECTION_BASE_DIR/dummy_0/libtest/config/.libtest"
+
+    # lib.sh defines a function that creates a marker file
+    cat > "$COLLECTION_BASE_DIR/dummy_0/libtest/hooks/lib.sh" << 'EOF'
+create_marker() {
+    touch "$CAIFS_LINK_ROOT/.lib_marker"
+}
+EOF
+
+    # post.sh calls the function from lib.sh
+    cat > "$COLLECTION_BASE_DIR/dummy_0/libtest/hooks/post.sh" << 'EOF'
+generic() {
+    create_marker
+}
+EOF
+
+    caifs add libtest -d $COLLECTION_BASE_DIR/dummy_0
+
+    assertTrue "lib.sh function should have been called and created marker" "[ -f $CAIFS_LINK_ROOT/.lib_marker ]"
+}
+
 testRemovingLinks() {
     caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --links
     assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.gitconfig ]"
