@@ -780,7 +780,7 @@ uv_install() {
         log_debug "Found ${PACKAGE}_VERSION=$PACKAGE_VERSION"
         PACKAGE="$PACKAGE==$PACKAGE_VERSION"
     fi
-    uv tool install --upgrade "$PACKAGE $*"
+    uv tool install --upgrade "$PACKAGE" "$@"
 }
 
 # Removes a package via a uv tool install
