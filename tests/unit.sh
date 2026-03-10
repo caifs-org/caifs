@@ -368,4 +368,47 @@ test_first_char() {
     assertSame "First character of $str should be *" "*" "$char"
 }
 
+test_hooks_subshell() {
+
+    _touchpath "$TMPDIR/my-collection/target1/hooks/pre.sh"
+
+    cat << EOF > $TMPDIR/my-collection/target1/hooks/pre.sh
+generic() {
+  echo "$CAIFS_TARGET" > generic_marker0.txt
+  export GENERIC_VARIABLE=test
+
+  echo "DRY_RUN=$DRY_RUN"
+  export -p
+
+  echo "target=$target"
+
+  if [ -z "$CAIFS_TARGET" ]; then
+     echo "$CAIFS_TARGET does not exist"
+     exit 1
+  fi
+}
+
+linux() {
+  echo "$CAIFS_TARGET" > linux_marker0.txt
+  export LINUX_VARIABLE=test
+}
+EOF
+
+    assertTrue "The variables should not be set" "[ -z "$GENERIC_VARIABLE" ]"
+
+    type "generic" 2>/dev/null | grep -q 'function'
+    is_function_rc=$?
+
+    DRY_RUN=1
+    assertSame "The function generic shouldn't exist prior to running hooks" "1" "$is_function_rc"
+    run_hook "$TMPDIR/my-collection" "target1" "pre"
+
+    type "generic" 2>/dev/null | grep -q 'function'
+    is_function_rc=$?
+    assertTrue "The variables \$GENERIC_VARIABLE and \$LINUX_VARIABLE should not be set after the run " "[ -z "$GENERIC_VARIABLE" ]"
+    assertSame "The function generic shouldn't exist after running hooks" "1" "$is_function_rc"
+
+    assertTrue "The CAIFS_TARGET variable should be set after a run" "[ -z "$CAIFS_TARGET" ]"
+}
+
 . ./shunit2/shunit2
