@@ -143,7 +143,12 @@ get_collection_constraint() {
 # returns a loopable string of files found within the supplied directory
 # $1: The directory to search
 files_in_dir() {
-    find "${1}" \( -type f -o -type l \) -printf "%P\n" 2>/dev/null
+    dir=$1
+    [ -d "$dir" ] || return 0
+    (
+        cd "$dir" || exit 0
+        find . \( -type f -o -type l \) -print 2>/dev/null | sed 's|^\./||'
+    )
 }
 
 # Splits a string at a desired character and returns the portion before the character
