@@ -66,6 +66,7 @@ Add Command options:
   -f, --force             Overwrite existing files/links
   -n, --dry-run           Don't do any linking or run hooks, just print the action
   -r, --link-root <path>  Set an alternative to $HOME as the link destination
+  -u, --user              Set an alternative to the $USER as the the link or install owner
 
 Remove Command options:
   -d, --directory <path>  Collection directory (can be specified multiple times)
@@ -90,6 +91,7 @@ Environment variables:
   CAIFS_RUN_FORCE         Set to 0 to force overwrite existing files/links
   CAIFS_RUN_LINKS         Set to 1 to skip symlinking
   CAIFS_RUN_HOOKS         Set to 1 to skip hooks
+  CAIFS_USER              User to apply ownership of links and installed files (default: $USER)
 
 Examples:
   caifs add git                       Run git target from current directory
@@ -141,7 +143,7 @@ main() {
     case "$SUBCOMMAND" in
         add)
             # Parse 'run' specific options
-            SUB_TEMP=$(getopt -o r:nflhd:c: -l link-root:,dry-run,force,links,hooks,directory:,collection: -n "run" -- "$@")
+            SUB_TEMP=$(getopt -o r:nflhd:c:u: -l link-root:,dry-run,force,links,hooks,directory:,collection:,user: -n "run" -- "$@")
             # shellcheck disable=SC2181
             if [ $? -ne 0 ]; then exit 1; fi
             eval set -- "$SUB_TEMP"
@@ -164,6 +166,7 @@ main() {
                     -r|--link-root) set_link_root "$(realpath "$2")"; shift 2;;
                     -c|--collection) set_collection_constraint "$2"; shift 2;;
                     -f|--force) set_force 0; shift ;;
+                    -u|--user) set_run_user "$2"; shift 2;;
                     --) shift; break ;;
                     *) break ;;
                 esac

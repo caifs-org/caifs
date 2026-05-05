@@ -277,6 +277,7 @@ caifs add git@caifs-common fzf curl custom@my-dotfiles
 |                           |                                  | Set to `1` to specify not in container, regardless of if in a container or not |
 | `CAIFS_IN_WSL`            | unset                            | Set to `0` to set WSL config to run. Set to `1` to force to run                |
 | `CAIFS_LOCAL_COLLECTIONS` | ~/.local/share/caifs-collections | A central store for collections that is automatically checked.                 |
+| `CAIFS_USER`              | `$USER`                          | Override the user that the links will be owned by                              |
 |                           |                                  |                                                                                |
 
 ## Advanced Configuration

@@ -61,6 +61,10 @@ COLLECTION_CONSTRAINT=""
 # this can be overridden
 export LINK_ROOT="${CAIFS_LINK_ROOT:-$HOME}"
 
+# The user that links should be owned by, which is useful in root situations like docker where installs are typically
+# performed by the root user, but can be owned by the
+export RUN_USER="${CAIFS_USER:=$USER}"
+
 # Source the OS type and export the most useful for being available in executed scripts
 export OS_TYPE=
 OS_TYPE="$(uname -s)"
@@ -113,6 +117,14 @@ get_link_root() {
 
 set_force() {
     RUN_FORCE=${1}
+}
+
+set_run_user() {
+    RUN_USER=${1}
+}
+
+get_run_user() {
+    echo "$RUN_USER"
 }
 
 # Enables (0) or disables (1) the debugging logs
@@ -455,8 +467,9 @@ run_hook() {
         log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
         # Run within a subshell, this has the benefit of any sourced script functions and variables
         # do not pollute subsequent targets on the same run
+        export CAIFS_TARGET="$target"
         (
-            export CAIFS_TARGET="$target"
+
             TMP_DIR=$(mktemp -d)
             cd "${TMP_DIR}" || exit
 
@@ -470,6 +483,8 @@ run_hook() {
             cd - || exit
             rm -rf "${TMP_DIR}"
         )
+        unset CAIFS_TARGET
+
     else
         log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
     fi
@@ -675,6 +690,8 @@ create_link() {
 
     log_info "Creating Link $source_file -> $dest_link"
     dry_or_exec "$link_cmd"
+
+    change_owner "$dest_link" "$require_escalation"
 }
 
 # $1 - line to conditionally add
@@ -714,9 +731,18 @@ has_or_exit() {
 check_and_exec_function() {
     func_name=$1
     if type "$func_name" > /dev/null 2>&1; then
+        log_debug "function name=$func_name exists and will be run"
         shift 1
         eval "$func_name $*"
+        rc="$?"
+        if [ "$rc" -ne 0 ]; then
+            log_info "$func_name exited with non-zero exit code, rc=$rc"
+            exit "$rc"
+        fi
+    else
+        log_debug "skipping function name=$func_name as it does not exist"
     fi
+
 }
 
 # Looks for a version environment variable for a given name
@@ -736,7 +762,8 @@ version_from_env() {
 # This function helps during container builds, as usually the container runs as root and sudo isn't installed.
 # This negates the need to add sudo, but must be run as root now
 rootdo() {
-    # If this is not run as an elevated user, then attempt to run the entire script again as sudo
+    # If this is not run as an elevated user, then attempt to run the entire script again as sudo, or failing that
+    # execute the command as root, on behalf of the user. Which may require an interactive password prompt
     if [ "$(id -u)" -ne 0 ]; then
         if has sudo ; then
             sudo "$@"
@@ -762,6 +789,26 @@ yay_install() {
 yay_uninstall() {
     has_or_exit yay
     yay -Rns --noconfirm "$@"
+}
+
+# Install packages via apt-get for debian and ubuntu
+# rudimentary checks are in place to determine if and update is required
+# $@ packages and options to install
+apt_install() {
+    has_or_exit apt-get
+
+    if ! ls -l /var/lib/apt/lists/; then
+        rootdo apt-get update
+    fi
+
+    rootdo apt-get install -y "$@"
+}
+
+# uninstall packages via apt-get for debian and ubuntu
+# $@packages and options to uninstall
+apt_uninstall() {
+    has_or_exit apt-get
+    rootdo apt-get uninstall -y "$@"
 }
 
 # This helper function can be used for installing tools via uv
@@ -882,9 +929,25 @@ fedora_cert_handler() {
     rhel_cert_handler "$@"
 }
 
+# Changes the permissions of a file or link according to the $RUN_USER variable, if set
+# $1: The file or directory
+# $2: root permissions required flag, default 1 false
+ensure_permissions() {
+    needs_root=${2:-1}
+
+    if [ -n "${RUN_USER}" ]; then
+        if [ "$needs_root" -eq 0 ]; then
+            dry_or_exec rootdo chown -hR "${RUN_USER}" "$1"
+        else
+            dry_or_exec chown -hR "${RUN_USER}" "$1"
+        fi
+    fi
+}
+
 # A utility that allows installing software from a hook script, with respect to the LINK_ROOT
 # It performs root escalation, if the current LINK_ROOT is anchored at /
 # Files will be copied recurisvely to the LINK_ROOT destination, so $1 path should be in required order
+# Note: Function respects the CAIFS_USER variable, so ownership will be applied to all files if set
 # $1: Path to install
 # $2: Optional extra directory, useful for the LINK_ROOT=$HOME use case. Defaults to .local
 caifs_install() {
@@ -894,13 +957,17 @@ caifs_install() {
     if is_root_config "$LINK_ROOT"; then
         log_debug "Link root appears to reference / - escalating privileges for copy"
         dry_or_exec rootdo cp -r "$1" "$LINK_ROOT/"
+        ensure_permissions "$LINK_ROOT" 1
     elif [ "$LINK_ROOT" = "$HOME" ]; then
         log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
         dry_or_exec cp -r "$1" "$LINK_ROOT/$link_root_home/"
+        ensure_permissions "$LINK_ROOT"
     else
-        # respect LINK_ROOT,but it appears to not need privileges
+        # respect LINK_ROOT, but it appears to not need privileges
         dry_or_exec cp -r "$1" "$LINK_ROOT/"
+        ensure_permissions "$LINK_ROOT"
     fi
+
 }
 
 # Generic install script for installing per OS_ID based on the above global
