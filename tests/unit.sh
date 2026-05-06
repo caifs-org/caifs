@@ -414,6 +414,8 @@ EOF
 }
 
 
+# Need to figure out a nice way to test ownership without messing with the
+# Perhaps moving to a container build will solve this
 test_ownership_recursive() {
     :
 
