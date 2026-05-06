@@ -21,6 +21,14 @@ download-shunit:
     mv shunit2-${SHUNIT2_VERSION} shunit2
     rm -rf shunit2-${SHUNIT2_VERSION}
 
+[script]
+test-in-docker:
+    docker build \
+    --progress=plain \
+    --no-cache \
+     -f Dockerfile.test \
+     .
+
 # Run integration and unit tests
 [script]
 test:

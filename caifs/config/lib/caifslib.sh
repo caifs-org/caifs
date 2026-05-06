@@ -680,6 +680,7 @@ create_link() {
             mkdir_cmd="rootdo $mkdir_cmd"
         fi
         dry_or_exec "$mkdir_cmd"
+        ensure_permissions "$basedir" "$require_escalation"
     fi
 
     link_cmd="ln -s $source_file $dest_link"
@@ -691,7 +692,7 @@ create_link() {
     log_info "Creating Link $source_file -> $dest_link"
     dry_or_exec "$link_cmd"
 
-    change_owner "$dest_link" "$require_escalation"
+    ensure_permissions "$dest_link" "$require_escalation"
 }
 
 # $1 - line to conditionally add
@@ -937,9 +938,9 @@ ensure_permissions() {
 
     if [ -n "${RUN_USER}" ]; then
         if [ "$needs_root" -eq 0 ]; then
-            dry_or_exec rootdo chown -hR "${RUN_USER}" "$1"
+            dry_or_exec rootdo chown -R "${RUN_USER}" "$1"
         else
-            dry_or_exec chown -hR "${RUN_USER}" "$1"
+            dry_or_exec chown -R "${RUN_USER}" "$1"
         fi
     fi
 }

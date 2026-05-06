@@ -4,7 +4,8 @@
 . ./$(dirname $0)/../caifs/config/lib/caifslib.sh
 
 oneTimeSetUp() {
-    :
+    TEST_USER=${TEST_USER:-$TEST_USER}
+    TEST_USER_HOME=${TEST_USER_HOME:-$TEST_USER_HOME}
 }
 
 oneTimeTearDown() {
