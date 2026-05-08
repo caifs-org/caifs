@@ -64,7 +64,7 @@ export LINK_ROOT="${CAIFS_LINK_ROOT:-$HOME}"
 export RUN_USER="${CAIFS_USER:=$USER}"
 
 # Local directory for linking certificates into
-export LOCAL_CERT_DIR="$LINK_ROOT/.local/share/certificates"
+export LOCAL_CERT_DIR=".local/share/certificates"
 
 # Source the OS type and export the most useful for being available in executed scripts
 export OS_TYPE=
@@ -895,16 +895,17 @@ gitlab_latest_tag() {
 
 # Installs previously linked certificiates from $LOCAL_CERT_DIR into the specific trust chain of the current OS
 install_certs() {
-    for cert in "${LOCAL_CERT_DIR}"/*; do
+    cert_dir="$(get_link_root)/${LOCAL_CERT_DIR}"
+    for cert in "$cert_dir"/*; do
         [ -e "$cert" ] || continue
         cert_name=$(basename "$cert")
         log_info "Importing CA '$cert_name' for ${OS_TYPE}/${OS_ID}"
         case "$OS_TYPE" in
             Linux)
-                check_and_exec_function "${OS_ID}_cert_handler" "$cert_name" "$LOCAL_CERT_DIR"
+                check_and_exec_function "${OS_ID}_cert_handler" "$cert_name" "$cert_dir"
                 ;;
             Darwin)
-                check_and_exec_function "macos_cert_handler" "$cert_name" "$LOCAL_CERT_DIR"
+                check_and_exec_function "macos_cert_handler" "$cert_name" "$cert_dir"
                 ;;
             *)
                 log_error "Not a support OS - ${OS_TYPE}"
