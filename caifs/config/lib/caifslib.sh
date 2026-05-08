@@ -35,8 +35,6 @@ CAIFS_VERSION=0.7.0
 
 HOOKS_DIR=hooks
 
-# Local directory for linking certificates into
-export LOCAL_CERT_DIR="$HOME/.local/share/certificates"
 LOCAL_COLLECTION_DIR=${CAIFS_LOCAL_COLLECTIONS:-"$HOME/.local/share/caifs-collections"}
 
 # Force the override of existing link targets
@@ -64,6 +62,9 @@ export LINK_ROOT="${CAIFS_LINK_ROOT:-$HOME}"
 # The user that links should be owned by, which is useful in root situations like docker where installs are typically
 # performed by the root user, but can be owned by the
 export RUN_USER="${CAIFS_USER:=$USER}"
+
+# Local directory for linking certificates into
+export LOCAL_CERT_DIR="$LINK_ROOT/.local/share/certificates"
 
 # Source the OS type and export the most useful for being available in executed scripts
 export OS_TYPE=
@@ -895,6 +896,7 @@ gitlab_latest_tag() {
 # Installs previously linked certificiates from $LOCAL_CERT_DIR into the specific trust chain of the current OS
 install_certs() {
     for cert in "${LOCAL_CERT_DIR}"/*; do
+        [ -e "$cert" ] || continue
         cert_name=$(basename "$cert")
         log_info "Importing CA '$cert_name' for ${OS_TYPE}/${OS_ID}"
         case "$OS_TYPE" in
