@@ -42,8 +42,7 @@ jobs:
       # Runs a single command using the runners shell
       - name: Run the tests
         run: |
-          just download-shunit
-          just test
+          just test-in-docker
 
       - name: Log in to the GitHub Container Registry
         uses: docker/login-action@v3

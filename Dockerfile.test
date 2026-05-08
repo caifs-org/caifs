@@ -1,0 +1,29 @@
+FROM debian:trixie-slim AS test
+
+ARG TEST_USER=testuser
+ARG TEST_USER_HOME=/home/testuser
+
+ENV TEST_USER=$TEST_USER
+ENV TEST_USER_HOME=$TEST_USER_HOME
+
+COPY --from=ghcr.io/casey/just:latest /just /usr/local/bin/
+
+RUN command -v curl >/dev/null 2>&1 || (apt-get update && apt-get install -y curl git tree)
+
+RUN useradd \
+    --create-home \
+    --home-dir $TEST_USER_HOME \
+    --uid 1000 \
+    --shell /bin/sh \
+    $TEST_USER
+
+WORKDIR /staging
+
+#COPY --parents caifs/ tests/ Justfile /staging
+COPY ./caifs  /staging/caifs
+COPY ./tests /staging/tests
+COPY Justfile .
+
+RUN ls -lh
+RUN just download-shunit
+RUN just test

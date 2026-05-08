@@ -7,6 +7,9 @@ oneTimeSetUp() {
     if ! command -v caifs &>/dev/null; then
         PATH="$(dirname $0)/../caifs/config/bin/:$PATH"
     fi
+
+    TEST_USER=${TEST_USER:-$TEST_USER}
+    TEST_USER_HOME=${TEST_USER_HOME:-$TEST_USER_HOME}
 }
 
 oneTimeTearDown() {
@@ -245,6 +248,23 @@ test_wildcard_explicit_constraint() {
     assertTrue ".bashrc should be linked to root dir after add a link" "[ -L $CAIFS_LINK_ROOT/.bashrc ]"
     link=$(readlink "$CAIFS_LINK_ROOT/.bashrc")
     assertEquals "Only dummy_1 should be linked" "$COLLECTION_BASE_DIR/dummy_1/bash/config/.bashrc" "$link"
+}
+
+# Test that running as root, with the correct link-root and user flags will correctly change the ownership
+test_ownership_from_root() {
+    CAIFS_LOCAL_COLLECTIONS=$COLLECTION_BASE_DIR caifs add '*@dummy_1' --links --user $TEST_USER:$TEST_USER --link-root $TEST_USER_HOME
+
+    assertTrue ".gitconfig should be linked to root dir after add a link" "[ -L $TEST_USER_HOME/.gitconfig ]"
+    link=$(readlink "$TEST_USER_HOME/.gitconfig")
+
+    link_owner=$(stat -c '%U' "$TEST_USER_HOME/.gitconfig")
+
+    assertSame "owner of link should be $TEST_USER" "$link_owner" "$TEST_USER"
+
+    assertTrue "File should be writable by owner" "[ -w $TEST_USER_HOME/.gitconfig ]"
+
+    ls -lah $TEST_USER_HOME
+
 }
 
 . ./shunit2/shunit2

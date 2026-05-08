@@ -36,7 +36,7 @@ CAIFS_VERSION=0.6.2
 HOOKS_DIR=hooks
 
 # Local directory for linking certificates into
-LOCAL_CERT_DIR=~/.local/share/certificates
+export LOCAL_CERT_DIR="$HOME/.local/share/certificates"
 LOCAL_COLLECTION_DIR=${CAIFS_LOCAL_COLLECTIONS:-"$HOME/.local/share/caifs-collections"}
 
 # Force the override of existing link targets
@@ -48,8 +48,8 @@ RUN_HOOKS=${CAIFS_RUN_HOOKS:-0}
 RUN_TARGETS=""
 
 # Multiple targets could be specified. We will run them in order
-VERBOSE=${CAIFS_VERBOSE:=1}
-DRY_RUN=${CAIFS_DRY_RUN:-1}
+export VERBOSE="${CAIFS_VERBOSE:=1}"
+export DRY_RUN="${CAIFS_DRY_RUN:-1}"
 
 # A list of directories to interogate for caifs collections
 CAIFS_COLLECTIONS=${CAIFS_COLLECTIONS:-""}
@@ -59,7 +59,11 @@ COLLECTION_CONSTRAINT=""
 
 # The root directory of where config should link to. By default it should be home, but for root scenarios
 # this can be overridden
-LINK_ROOT=${CAIFS_LINK_ROOT:-$HOME}
+export LINK_ROOT="${CAIFS_LINK_ROOT:-$HOME}"
+
+# The user that links should be owned by, which is useful in root situations like docker where installs are typically
+# performed by the root user, but can be owned by the
+export RUN_USER="${CAIFS_USER:=$USER}"
 
 # Source the OS type and export the most useful for being available in executed scripts
 export OS_TYPE=
@@ -113,6 +117,14 @@ get_link_root() {
 
 set_force() {
     RUN_FORCE=${1}
+}
+
+set_run_user() {
+    RUN_USER=${1}
+}
+
+get_run_user() {
+    echo "$RUN_USER"
 }
 
 # Enables (0) or disables (1) the debugging logs
@@ -458,19 +470,26 @@ run_hook() {
 
     elif [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
         log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+        # Run within a subshell, this has the benefit of any sourced script functions and variables
+        # do not pollute subsequent targets on the same run
+        export CAIFS_TARGET="$target"
+        (
 
-        TMP_DIR=$(mktemp -d)
-        cd "${TMP_DIR}" || exit
+            TMP_DIR=$(mktemp -d)
+            cd "${TMP_DIR}" || exit
 
-        # shellcheck disable=SC1090
-        # import the hook script functions
-        . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
+            # shellcheck disable=SC1090
+            # import the hook script functions
+            . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
-        log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
-        run_hook_functions
+            log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
+            run_hook_functions
 
-        cd - || exit
-        rm -rf "${TMP_DIR}"
+            cd - || exit
+            rm -rf "${TMP_DIR}"
+        )
+        unset CAIFS_TARGET
+
     else
         log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
     fi
@@ -666,6 +685,7 @@ create_link() {
             mkdir_cmd="rootdo $mkdir_cmd"
         fi
         dry_or_exec "$mkdir_cmd"
+        ensure_permissions "$basedir" "$require_escalation"
     fi
 
     link_cmd="ln -s $source_file $dest_link"
@@ -676,6 +696,8 @@ create_link() {
 
     log_info "Creating Link $source_file -> $dest_link"
     dry_or_exec "$link_cmd"
+
+    ensure_permissions "$dest_link" "$require_escalation"
 }
 
 # $1 - line to conditionally add
@@ -715,9 +737,18 @@ has_or_exit() {
 check_and_exec_function() {
     func_name=$1
     if type "$func_name" > /dev/null 2>&1; then
+        log_debug "function name=$func_name exists and will be run"
         shift 1
         eval "$func_name $*"
+        rc="$?"
+        if [ "$rc" -ne 0 ]; then
+            log_info "$func_name exited with non-zero exit code, rc=$rc"
+            exit "$rc"
+        fi
+    else
+        log_debug "skipping function name=$func_name as it does not exist"
     fi
+
 }
 
 # Looks for a version environment variable for a given name
@@ -737,7 +768,8 @@ version_from_env() {
 # This function helps during container builds, as usually the container runs as root and sudo isn't installed.
 # This negates the need to add sudo, but must be run as root now
 rootdo() {
-    # If this is not run as an elevated user, then attempt to run the entire script again as sudo
+    # If this is not run as an elevated user, then attempt to run the entire script again as sudo, or failing that
+    # execute the command as root, on behalf of the user. Which may require an interactive password prompt
     if [ "$(id -u)" -ne 0 ]; then
         if has sudo ; then
             sudo "$@"
@@ -765,6 +797,26 @@ yay_uninstall() {
     yay -Rns --noconfirm "$@"
 }
 
+# Install packages via apt-get for debian and ubuntu
+# rudimentary checks are in place to determine if and update is required
+# $@ packages and options to install
+apt_install() {
+    has_or_exit apt-get
+
+    if ! ls -l /var/lib/apt/lists/; then
+        rootdo apt-get update
+    fi
+
+    rootdo apt-get install -y "$@"
+}
+
+# uninstall packages via apt-get for debian and ubuntu
+# $@packages and options to uninstall
+apt_uninstall() {
+    has_or_exit apt-get
+    rootdo apt-get uninstall -y "$@"
+}
+
 # This helper function can be used for installing tools via uv
 # If a corresponding env var of the form $<PACKAGE NAME>_VERSION exists, then this is assumed to be
 # a version number required for the package. It will be appended to the uv install command via the == syntax
@@ -781,7 +833,7 @@ uv_install() {
         log_debug "Found ${PACKAGE}_VERSION=$PACKAGE_VERSION"
         PACKAGE="$PACKAGE==$PACKAGE_VERSION"
     fi
-    uv tool install --upgrade "$PACKAGE $*"
+    uv tool install --upgrade "$PACKAGE" "$@"
 }
 
 # Removes a package via a uv tool install
@@ -883,9 +935,25 @@ fedora_cert_handler() {
     rhel_cert_handler "$@"
 }
 
+# Changes the permissions of a file or link according to the $RUN_USER variable, if set
+# $1: The file or directory
+# $2: root permissions required flag, default 1 false
+ensure_permissions() {
+    needs_root=${2:-1}
+
+    if [ -n "${RUN_USER}" ]; then
+        if [ "$needs_root" -eq 0 ]; then
+            dry_or_exec rootdo chown -R "${RUN_USER}" "$1"
+        else
+            dry_or_exec chown -R "${RUN_USER}" "$1"
+        fi
+    fi
+}
+
 # A utility that allows installing software from a hook script, with respect to the LINK_ROOT
 # It performs root escalation, if the current LINK_ROOT is anchored at /
 # Files will be copied recurisvely to the LINK_ROOT destination, so $1 path should be in required order
+# Note: Function respects the CAIFS_USER variable, so ownership will be applied to all files if set
 # $1: Path to install
 # $2: Optional extra directory, useful for the LINK_ROOT=$HOME use case. Defaults to .local
 caifs_install() {
@@ -895,13 +963,17 @@ caifs_install() {
     if is_root_config "$LINK_ROOT"; then
         log_debug "Link root appears to reference / - escalating privileges for copy"
         dry_or_exec rootdo cp -r "$1" "$LINK_ROOT/"
+        ensure_permissions "$LINK_ROOT" 1
     elif [ "$LINK_ROOT" = "$HOME" ]; then
         log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
         dry_or_exec cp -r "$1" "$LINK_ROOT/$link_root_home/"
+        ensure_permissions "$LINK_ROOT"
     else
-        # respect LINK_ROOT,but it appears to not need privileges
+        # respect LINK_ROOT, but it appears to not need privileges
         dry_or_exec cp -r "$1" "$LINK_ROOT/"
+        ensure_permissions "$LINK_ROOT"
     fi
+
 }
 
 # Generic install script for installing per OS_ID based on the above global
@@ -917,17 +989,12 @@ run_hook_functions() {
             check_and_exec_function "${OS_ID}"
 
             check_and_exec_function linux
-
-            unset -f "${OS_ID}" linux
             ;;
         Darwin)
             check_and_exec_function macos
-
-            unset -f macos darwin
             ;;
         *)
             log_error "Not a supported OS"
-
             # This is invoked directly, we can safely ignore it, as it does actually work
             # shellcheck disable=SC2317
             exit 1
@@ -936,12 +1003,10 @@ run_hook_functions() {
 
     # perhaps there's a generic install for all operating systems. Eg uv
     check_and_exec_function generic
-    unset -f generic
 
     # Run container-specific hooks for cleanup, etc.
     if is_container; then
         log_debug "Container environment detected"
         check_and_exec_function container
-        unset -f container
     fi
 }

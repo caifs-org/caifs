@@ -4,7 +4,8 @@
 . ./$(dirname $0)/../caifs/config/lib/caifslib.sh
 
 oneTimeSetUp() {
-    :
+    TEST_USER=${TEST_USER:-$TEST_USER}
+    TEST_USER_HOME=${TEST_USER_HOME:-$TEST_USER_HOME}
 }
 
 oneTimeTearDown() {
@@ -366,6 +367,63 @@ test_first_char() {
     str="*@hello"
     char=$(first_char "$str")
     assertSame "First character of $str should be *" "*" "$char"
+}
+
+test_hooks_subshell() {
+
+    _touchpath "$TMPDIR/my-collection/target1/hooks/pre.sh"
+
+    cat << EOF > $TMPDIR/my-collection/target1/hooks/pre.sh
+generic() {
+  echo "\$CAIFS_TARGET" > generic_marker0.txt
+  export GENERIC_VARIABLE=test
+
+  echo "DRY_RUN=\$DRY_RUN"
+  echo "target=\$target"
+
+  cat generic_marker0.txt
+  if [ -z "\$CAIFS_TARGET" ]; then
+     echo "CAIFS_TARGET=\$CAIFS_TARGET does not exist"
+     exit 2
+  else
+     echo "CAIFS_TARGET=\$CAIFS_TARGET does EXIST!"
+     exit 1
+  fi
+}
+
+linux() {
+  echo "\$CAIFS_TARGET" > linux_marker0.txt
+  export LINUX_VARIABLE=test
+}
+EOF
+
+    assertTrue "The variables should not be set" "[ -z "$GENERIC_VARIABLE" ]"
+
+    type "generic" 2>/dev/null | grep -q 'function'
+    is_function_rc=$?
+
+    DRY_RUN=1
+    assertSame "The function generic shouldn't exist prior to running hooks" "1" "$is_function_rc"
+    run_hook "$TMPDIR/my-collection" "target1" "pre"
+
+    type "generic" 2>/dev/null | grep -q 'function'
+    is_function_rc=$?
+    assertTrue "The variables \$GENERIC_VARIABLE and \$LINUX_VARIABLE should not be set after the run " "[ -z "$GENERIC_VARIABLE" ]"
+    assertSame "The function generic shouldn't exist after running the hook" "1" "$is_function_rc"
+
+    assertTrue "The CAIFS_TARGET variable should not be set after a run" "[ -z "$CAIFS_TARGET" ]"
+}
+
+
+# Need to figure out a nice way to test ownership without messing with the
+# Perhaps moving to a container build will solve this
+test_ownership_recursive() {
+    :
+
+}
+
+test_ownership_link() {
+    :
 }
 
 . ./shunit2/shunit2

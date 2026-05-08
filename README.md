@@ -277,6 +277,7 @@ caifs add git@caifs-common fzf curl custom@my-dotfiles
 |                           |                                  | Set to `1` to specify not in container, regardless of if in a container or not |
 | `CAIFS_IN_WSL`            | unset                            | Set to `0` to set WSL config to run. Set to `1` to force to run                |
 | `CAIFS_LOCAL_COLLECTIONS` | ~/.local/share/caifs-collections | A central store for collections that is automatically checked.                 |
+| `CAIFS_USER`              | `$USER`                          | Override the user that the links will be owned by                              |
 |                           |                                  |                                                                                |
 
 ## Advanced Configuration
@@ -286,7 +287,9 @@ caifs add git@caifs-common fzf curl custom@my-dotfiles
 Configuring `sudo` is generally recommended for ease of use, especially when working with docker containers. The default
 in WSL2 is something akin to `echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers`
 
-This is fine for a dedicated local dev machine, but if you working with containers then you might want to restrict that.
+This is fine for a dedicated local dev machine, but if you working with containers then you might want to restrict sudo
+or better, yet make use of the `CAIFS_LINK_ROOT` and `CAIFS_USER` variables to install within another users home
+directory, or, provide the correct permissions.
 
 Depending on your distro of choice, CAIFS requires the following for `sudo` access
 
@@ -389,7 +392,7 @@ to the default `$HOME` destination for links.
 You can specify this with the `-r|--link-root` flags for the `add|rm` commands or use the `$CAIFS_LINK_ROOT` environment
 variable
 
-In a typical docker builds, or perhaps escalated automation scenarios where you are running as root, but want the
+In typical docker builds, or perhaps escalated automation scenarios where you are running as root, but want the
 configuration to be placed into another users home directory.
 
 ``` Dockerfile
@@ -403,7 +406,6 @@ RUN useradd \
     --shell /bin/sh \
     appuser
 
-
 # Copy over a collection, or perhaps curl one on from github
 COPY my-docker-collection /usr/local/share/my-docker-collection
 
@@ -412,6 +414,7 @@ COPY my-docker-collection /usr/local/share/my-docker-collection
 RUN curl -sL https://github.com/caifs-org/caifs/install.sh | sh && \
     caifs add uv git pre-commit ruff \
       --link-root /app \
+      --user appuser:appuser \
       -d /usr/local/share/my-docker-collection
 ```
 
@@ -431,12 +434,13 @@ of configuration that should only be linked in a particular environment, provide
 
 ### Command Options
 
-| Option               | Env Variable        | Description                                  |
-|----------------------|---------------------|----------------------------------------------|
-| `--verbose`, `-v`    | `CAIFS_VERBOSE=0`   | Show debug logs                              |
-| `--force`, `-f`      | `CAIFS_RUN_FORCE=0` | Remove existing links/files on conflict      |
-| `--links`, `-l`      | `CAIFS_RUN_LINKS=0` | Run only links, disable hooks                |
-| `--hooks`, `-h`      | `CAIFS_RUN_HOOKS=0` | Run only hooks, disable links                |
-| `--dry-run`, `-n`    | `CAIFS_DRY_RUN=0`   | Show what would run without making changes   |
-| `--collection`, `-c` | -                   | Constrain the targets to a single collection |
-|                      |                     |                                              |
+| Option               | Env Variable        | Description                                             |
+|----------------------|---------------------|---------------------------------------------------------|
+| `--verbose`, `-v`    | `CAIFS_VERBOSE=0`   | Show debug logs                                         |
+| `--force`, `-f`      | `CAIFS_RUN_FORCE=0` | Remove existing links/files on conflict                 |
+| `--links`, `-l`      | `CAIFS_RUN_LINKS=0` | Run only links, disable hooks                           |
+| `--hooks`, `-h`      | `CAIFS_RUN_HOOKS=0` | Run only hooks, disable links                           |
+| `--dry-run`, `-n`    | `CAIFS_DRY_RUN=0`   | Show what would run without making changes              |
+| `--collection`, `-c` | -                   | Constrain the targets to a single collection            |
+| `--user`, `-u`       | `CAIFS_USER`        | Apply the user permissions to links and instlaled files |
+|                      |                     |                                                         |
