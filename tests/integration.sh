@@ -182,7 +182,8 @@ test_wildcard_skips_invalid_targets() {
 # A marker file should be created when hooks are run
 test_hooks() {
     caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --hooks
-    assertTrue "A marker file should be present" "[ -f ${COLLECTION_BASE_DIR}/generic_marker0.txt ]"
+    assertTrue "A linux marker file should be present" "[ -f ${COLLECTION_BASE_DIR}/linux_marker0.txt ]"
+    assertFalse "A generic marker file should NOT be present" "[ -f ${COLLECTION_BASE_DIR}/generic_marker0.txt ]"
 }
 
 
@@ -190,6 +191,7 @@ test_hooks() {
 test_hooks_dry_run() {
 
     caifs add git -d $COLLECTION_BASE_DIR/dummy_0 --hooks --dry-run
+    assertFalse "A marker file should NOT be present" "[ -f ${COLLECTION_BASE_DIR}/linux_marker0.txt ]"
     assertFalse "A marker file should NOT be present" "[ -f ${COLLECTION_BASE_DIR}/generic_marker0.txt ]"
 
 }

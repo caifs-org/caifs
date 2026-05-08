@@ -732,11 +732,23 @@ has_or_exit() {
     fi
 }
 
+# Checks if a function exists and returns true 0 or false 1
+# $1: Name of the function to check for
+has_function() {
+    func_name=$1
+
+    if type "$func_name" > /dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Checks if a given function $1 exists and executes
 # with remaining parameters
 check_and_exec_function() {
     func_name=$1
-    if type "$func_name" > /dev/null 2>&1; then
+    if has_function "$func_name"; then
         log_debug "function name=$func_name exists and will be run"
         shift 1
         eval "$func_name $*"
@@ -985,10 +997,12 @@ run_hook_functions() {
 
     case "$OS_TYPE" in
         Linux)
-            # Run the specific OS installers before the general purpose linux one
-            check_and_exec_function "${OS_ID}"
-
-            check_and_exec_function linux
+            if has_function "${OS_ID}"; then
+                # Run the specific OS installers before the general purpose linux one
+                check_and_exec_function "${OS_ID}"
+            elif has_function linux; then
+                check_and_exec_function linux
+            fi
             ;;
         Darwin)
             check_and_exec_function macos
@@ -1002,8 +1016,10 @@ run_hook_functions() {
     esac
 
     # perhaps there's a generic install for all operating systems. Eg uv
-    check_and_exec_function generic
-
+    if ! (has_function macos || has_function "${OS_ID}" || has_function linux); then
+        log_debug "No 'macos', '${OS_ID}' or 'linux' function exists, checking for 'generic'"
+        check_and_exec_function generic
+    fi
     # Run container-specific hooks for cleanup, etc.
     if is_container; then
         log_debug "Container environment detected"
