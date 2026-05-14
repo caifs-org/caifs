@@ -150,10 +150,14 @@ my-dotfiles/
                 └── init.lua
 ```
 
+### Config files
+
 **Config files** mirror their destination path relative to `$HOME` (or `$CAIFS_LINK_ROOT`):
 
 - `git/config/.gitconfig` → `~/.gitconfig`
 - `nvim/config/.config/nvim/init.lua` → `~/.config/nvim/init.lua`
+
+### Hook scripts
 
 Three types of hooks exist, `pre.sh`, `post.sh` and `rm.sh`. Following on from the above example, if you wanted to do a
 `pre.sh` hook that installed git, before the configuration was symlinked across, then this would like like:
@@ -200,6 +204,19 @@ Available function names:
 - `generic` - all platforms
 - `container` - runs when inside a container (Docker, Podman, LXC, etc.)
 - `portable` - runs when on a portable device (laptop, notebook, etc.)
+
+### Writing your own hook scripts
+
+A hook script occurs within it's own sub-shell, meaning that any variables declared and any temporary generated files
+are deleted once the script exits. This is useful, as there is no manual cleanup required within a hook script.
+
+If you want to install files manually, to say the default `$HOME/.local/` folder, which is the default for CAIFS, then
+another temporary folder is provided via an environment variable, `${CAIFS_INSTALL_DIR}`. This folder has the following
+structure of `${CAIFS_INSTALL_DIR}/{bin,lib,share}`, which when you run the utility function `caifs_install` at the end
+of a hook function, will merge the contents of `${CAIFS_INSTALL_DIR}` into the `$CAIFS_LINK_ROOT` or equivalent CLI
+flag `--link-root <value>`.
+
+This also works for root installs, that wish to target directories like `/usr/local/` or `/usr/`
 
 ### CA trust updates
 
