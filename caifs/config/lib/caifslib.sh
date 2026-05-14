@@ -37,6 +37,10 @@ HOOKS_DIR=hooks
 
 LOCAL_COLLECTION_DIR=${CAIFS_LOCAL_COLLECTIONS:-"$HOME/.local/share/caifs-collections"}
 
+# A temporary install directory that is used by caifs_install.
+# hooks should use this install structure for providing installables
+export CAIFS_INSTALL_DIR="install"
+
 # Force the override of existing link targets
 RUN_FORCE=${CAIFS_RUN_FORCE:-1}
 
@@ -478,6 +482,9 @@ run_hook() {
 
             TMP_DIR=$(mktemp -d)
             cd "${TMP_DIR}" || exit
+
+            # pre create an install directory that caifs_install can use to automatically install files
+            mkdir -p ${CAIFS_INSTALL_DIR}/bin ${CAIFS_INSTALL_DIR}/lib ${CAIFS_INSTALL_DIR}/share
 
             # shellcheck disable=SC1090
             # import the hook script functions
@@ -967,26 +974,25 @@ ensure_permissions() {
 
 # A utility that allows installing software from a hook script, with respect to the LINK_ROOT
 # It performs root escalation, if the current LINK_ROOT is anchored at /
-# Files will be copied recurisvely to the LINK_ROOT destination, so $1 path should be in required order
+# Files will be copied recurisvely from the CAIFS_INSTALL_DIR to the LINK_ROOT destination
 # Note: Function respects the CAIFS_USER variable, so ownership will be applied to all files if set
-# $1: Path to install
-# $2: Optional extra directory, useful for the LINK_ROOT=$HOME use case. Defaults to .local
+# $1: Optional extra directory, useful for the LINK_ROOT=$HOME use case. Defaults to .local
 caifs_install() {
     link_root_home=${2:-".local"}
 
     # If the intended LINK_ROOT starts with / then we escalate privileges
     if is_root_config "$LINK_ROOT"; then
         log_debug "Link root appears to reference / - escalating privileges for copy"
-        dry_or_exec rootdo cp -r "$1" "$LINK_ROOT/"
-        ensure_permissions "$LINK_ROOT" 1
+        ensure_permissions "${CAIFS_INSTALL_DIR}/*" 1
+        dry_or_exec rootdo cp -r "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     elif [ "$LINK_ROOT" = "$HOME" ]; then
         log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
-        dry_or_exec cp -r "$1" "$LINK_ROOT/$link_root_home/"
-        ensure_permissions "$LINK_ROOT"
+        ensure_permissions "${CAIFS_INSTALL_DIR}/*"
+        dry_or_exec cp -r "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/$link_root_home/"
     else
         # respect LINK_ROOT, but it appears to not need privileges
-        dry_or_exec cp -r "$1" "$LINK_ROOT/"
-        ensure_permissions "$LINK_ROOT"
+        ensure_permissions "${CAIFS_INSTALL_DIR}/*"
+        dry_or_exec cp -r "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     fi
 
 }
