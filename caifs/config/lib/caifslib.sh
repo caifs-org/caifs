@@ -484,7 +484,10 @@ run_hook() {
             cd "${TMP_DIR}" || exit
 
             # pre create an install directory that caifs_install can use to automatically install files
-            mkdir -p ${CAIFS_INSTALL_DIR}/bin ${CAIFS_INSTALL_DIR}/lib ${CAIFS_INSTALL_DIR}/share
+            mkdir -p ${CAIFS_INSTALL_DIR}/bin \
+                  ${CAIFS_INSTALL_DIR}/lib \
+                  ${CAIFS_INSTALL_DIR}/share/zsh/completions \
+                  ${CAIFS_INSTALL_DIR}/share/bash-completion/completions
 
             # shellcheck disable=SC1090
             # import the hook script functions
