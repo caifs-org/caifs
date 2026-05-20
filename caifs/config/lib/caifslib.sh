@@ -496,7 +496,12 @@ run_hook() {
             log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
             run_hook_functions
 
-            cd - || exit
+            cd "${TMP_DIR}" || exit
+
+            # Run the caifs install to move files from the temp caifs install directory
+            caifs_install
+
+            #cd - || exit
             rm -rf "${TMP_DIR}"
         )
         unset CAIFS_TARGET
