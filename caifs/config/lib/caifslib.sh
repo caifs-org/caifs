@@ -1012,12 +1012,12 @@ caifs_remove() {
     for item in "$@"; do
         if is_root_config "$LINK_ROOT"; then
             log_debug "Link root appears to reference / - escalating privileges for copy"
-            dry_or_exec rootdo rm -r "$LINK_ROOT/$item"
+            dry_or_exec rootdo rm -vr "$LINK_ROOT/$item"
         elif [ "$LINK_ROOT" = "$HOME" ]; then
             log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
-            dry_or_exec rm -r "$LINK_ROOT/$link_root_home/$item"
+            dry_or_exec rm -vr "$LINK_ROOT/$link_root_home/$item"
         else
-            dry_or_exec rm -r "$LINK_ROOT/$item"
+            dry_or_exec rm -vr "$LINK_ROOT/$item"
         fi
     done
 }
