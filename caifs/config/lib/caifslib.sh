@@ -498,9 +498,6 @@ run_hook() {
 
             cd "${TMP_DIR}" || exit
 
-            # Run the caifs install to move files from the temp caifs install directory
-            caifs_install
-
             #cd - || exit
             rm -rf "${TMP_DIR}"
         )
@@ -992,17 +989,37 @@ caifs_install() {
     if is_root_config "$LINK_ROOT"; then
         log_debug "Link root appears to reference / - escalating privileges for copy"
         ensure_permissions "${CAIFS_INSTALL_DIR}/*" 1
-        dry_or_exec rootdo cp -r "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
+        dry_or_exec rootdo cp -vr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     elif [ "$LINK_ROOT" = "$HOME" ]; then
         log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
         ensure_permissions "${CAIFS_INSTALL_DIR}/*"
-        dry_or_exec cp -r "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/$link_root_home/"
+        dry_or_exec cp -vr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/$link_root_home/"
     else
         # respect LINK_ROOT, but it appears to not need privileges
         ensure_permissions "${CAIFS_INSTALL_DIR}/*"
-        dry_or_exec cp -r "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
+        dry_or_exec cp -vr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     fi
 
+}
+
+# shellcheck disable=SC2120
+# A utility that allows removing of software that has previously been installed via caifs_install
+# Much like caifs_install, it respects the LINK_ROOT destitation and acts accordingly
+# $@: List of files to remove
+caifs_remove() {
+
+    # prefix each argument with the $LINK_ROOT and remove
+    for item in "$@"; do
+        if is_root_config "$LINK_ROOT"; then
+            log_debug "Link root appears to reference / - escalating privileges for copy"
+            dry_or_exec rootdo rm -r "$LINK_ROOT/$item"
+        elif [ "$LINK_ROOT" = "$HOME" ]; then
+            log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
+            dry_or_exec rm -r "$LINK_ROOT/$link_root_home/$item"
+        else
+            dry_or_exec rm -r "$LINK_ROOT/$item"
+        fi
+    done
 }
 
 # Generic install script for installing per OS_ID based on the above global
