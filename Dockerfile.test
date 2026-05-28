@@ -20,10 +20,10 @@ RUN useradd \
 WORKDIR /staging
 
 #COPY --parents caifs/ tests/ Justfile /staging
-COPY ./caifs  /staging/caifs
+COPY ./src  /staging/src
 COPY ./tests /staging/tests
 COPY Justfile .
 
-RUN ls -lh
+RUN ls -lh src
 RUN just download-shunit
 RUN just test

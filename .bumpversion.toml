@@ -19,4 +19,4 @@ commit_args = ""
 filename = "README.md"
 
 [[tool.bumpversion.files]]
-filename = "caifs/config/lib/caifslib.sh"
+filename = "src/lib/caifslib.sh"

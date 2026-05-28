@@ -94,13 +94,35 @@ Check it's working and on your path with -
 
 `caifs --version` or `caifs --help`
 
+> ![TIP]
+> Running the above periodically will grab the latest version and keep it up to date
+
 OR
 
-Clone the repository and install CAIFS, using CAIFS
+Clone the repository and install CAIFS, using CAIFS hooks. This will copy the files from the `src/` directory into
+the default `$HOME/.local` structure. Running this caifs target again will copy and override, useful after refreshing
+the CAIFS git repo.
 
 ``` shell
 git clone https://github.com/caifs-org/caifs/caifs.git
-./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local"
+./src/bin/caifs add caifs -d .
+
+# periodically to update
+./src/bin/caifs add caifs -d .
+```
+
+OR
+
+If you are planning on working on caifs locally and want changes to immediately be applied globally, link the files
+in manually
+
+``` shell
+# Using just recipe
+just install-caifs-links
+
+# Or manually ....
+ln -s ~/.local/bin/caifs ~/path/to/caifs/src/bin/caifs
+ln -s ~/.local/lib/caifslib.sh ~/path/to/caifs/src/lib/caifslib.sh
 ```
 
 ### Enable caifs-common collection (optional but recommended)

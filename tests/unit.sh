@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck disable=all
 
-. ./$(dirname $0)/../caifs/config/lib/caifslib.sh
+. ./$(dirname $0)/../src/lib/caifslib.sh
 
 oneTimeSetUp() {
     TEST_USER=${TEST_USER:-$TEST_USER}
