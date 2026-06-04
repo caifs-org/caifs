@@ -894,6 +894,11 @@ npm_install() {
         PACKAGE="${PACKAGE}@${PACKAGE_VERSION}"
     fi
 
+    local_link_root=$LINK_ROOT
+    if [ "$LINK_ROOT" = "$HOME" ]; then
+        local_link_root="$LINK_ROOT/.local"
+    fi
+    npm config set prefix "$local_link_root"
     # npm has a bug where trailing spaces after the package name get added to the package
     # so we smoosh the trailing args up tight with the package name
     npm install --global "${PACKAGE}$*"
