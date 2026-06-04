@@ -465,13 +465,15 @@ run_hook() {
     target=$2
     hook_type=$3
 
+    collection_name=$(basename "$collection_path")
+
     if [ "$RUN_HOOKS" -ne 0 ]; then
         log_debug "Not running ${hook_type}-hook for target '$target' in collection $collection_path"
         return 0
     fi
 
     if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ] && [ "$DRY_RUN" -eq 0 ]; then
-        log_info "DRY-RUN: Would have run ${hook_type}-hook for target '$target' in collection $collection_path"
+        log_info "DRY-RUN: Would have run ${hook_type}-hook for target '$target' in collection $collection_name"
 
     elif [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
         log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
@@ -493,7 +495,7 @@ run_hook() {
             # import the hook script functions
             . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
-            log_info "Running ${hook_type}-hook for target '$target' on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
+            log_info "Running ${hook_type}-hook for target '$target' in '$collection_name' collection on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
             run_hook_functions
 
             cd "${TMP_DIR}" || exit
@@ -845,6 +847,8 @@ apt_uninstall() {
 # This helper function can be used for installing tools via uv
 # If a corresponding env var of the form $<PACKAGE NAME>_VERSION exists, then this is assumed to be
 # a version number required for the package. It will be appended to the uv install command via the == syntax
+# It also respects the LINK_ROOT option, if the LINK_ROOT is the default of $HOME, then the standard `.local` prefix is
+# added, otherwise it is assumed a user knows what they are doing and have specified a custom path
 # $1 name of the tool to install via uv
 uv_install() {
     has_or_exit uv
@@ -858,7 +862,17 @@ uv_install() {
         log_debug "Found ${PACKAGE}_VERSION=$PACKAGE_VERSION"
         PACKAGE="$PACKAGE==$PACKAGE_VERSION"
     fi
-    uv tool install --upgrade "$PACKAGE" "$@"
+
+    # Need to override the install base dir in the case of when a custom link root is specified. If it is the default,
+    # then we need to append the .local path. Otherwise, assume it is correct
+    local_link_root=$LINK_ROOT
+    if [ "$LINK_ROOT" = "$HOME" ]; then
+        local_link_root="$LINK_ROOT/.local"
+    fi
+
+    UV_TOOL_DIR="${local_link_root}/share/uv/tools" \
+    UV_TOOL_BIN_DIR="${local_link_root}/bin" \
+      uv tool install --upgrade "$PACKAGE" "$@"
 }
 
 # Removes a package via a uv tool install
