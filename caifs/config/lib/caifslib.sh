@@ -1068,11 +1068,15 @@ run_hook_functions() {
             ;;
     esac
 
-    # perhaps there's a generic install for all operating systems. Eg uv
-    if ! (has_function macos || has_function "${OS_ID}" || has_function linux); then
-        log_debug "No 'macos', '${OS_ID}' or 'linux' function exists, checking for 'generic'"
+    # only run the generic hook, if no OS_TYPE specific hooks exist, which imply they haven't been run
+    if [ "$OS_TYPE" = "Linux" ] && ! (has_function "${OS_ID}" || has_function linux); then
+        log_debug "No '${OS_ID}' or 'linux' hook function exists for OS_TYPE of $OS_TYPE, checking for 'generic'"
+        check_and_exec_function generic
+    elif [ "$OS_TYPE" = "Darwin" ] && ! (has_function "macos"); then
+        log_debug "No '${OS_ID}' or 'linux' hook function exists for OS_TYPE of $OS_TYPE, checking for 'generic'"
         check_and_exec_function generic
     fi
+
     # Run container-specific hooks for cleanup, etc.
     if is_container; then
         log_debug "Container environment detected"
