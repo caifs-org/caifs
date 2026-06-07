@@ -1008,15 +1008,15 @@ caifs_install() {
     if is_root_config "$LINK_ROOT"; then
         log_debug "Link root appears to reference / - escalating privileges for copy"
         ensure_permissions "${CAIFS_INSTALL_DIR}/*" 1
-        dry_or_exec rootdo cp -vr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
+        dry_or_exec rootdo cp -vpr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     elif [ "$LINK_ROOT" = "$HOME" ]; then
         log_debug "Link root is the default \$HOME - copying to $LINK_ROOT/$link_root_home/"
         ensure_permissions "${CAIFS_INSTALL_DIR}/*"
-        dry_or_exec cp -vr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/$link_root_home/"
+        dry_or_exec cp -vpr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/$link_root_home/"
     else
         # respect LINK_ROOT, but it appears to not need privileges
         ensure_permissions "${CAIFS_INSTALL_DIR}/*"
-        dry_or_exec cp -vr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
+        dry_or_exec cp -vpr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     fi
 
 }
@@ -1027,6 +1027,7 @@ caifs_install() {
 # $@: List of files to remove
 caifs_remove() {
 
+    link_root_home=".local"
     # prefix each argument with the $LINK_ROOT and remove
     for item in "$@"; do
         if is_root_config "$LINK_ROOT"; then
