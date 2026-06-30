@@ -4,26 +4,26 @@
 # the stdout returns
 log_debug() {
     if [ "$VERBOSE" -eq 0 ]; then
-        echo "DEBUG: $*" >&2
+        printf "[DEBUG] %s\n" "$@" >&2
     fi
 }
 
 # For general information that is useful for the user to see
 log_info() {
-    echo "INFO: $*"
+    printf "[INFO]  %s\n" "$@" >&2
 }
 
 # Information that is unexpected, but acknowledged and catered for
 # eg file conflicts
 log_warn() {
-    echo "WARN: $*"
+    printf "[WARN]  %s\n" "$@" >&2
 }
 
 # $1: The error message
 # $2: The exit code [Default 1]
 log_error() {
     rc=${2:-1}
-    echo "ERROR: $1"
+    printf  "[ERROR] %s\n" "$1" >&2
     exit "$rc"
 }
 
@@ -192,14 +192,19 @@ first_char() {
     echo "${1%"${1#?}"}"
 }
 
-# Gets an optional collection name from a target specifier, of the form target@<collection name>
+# Gets an optional collection name from a target specifier, of the form target@<collection name>==<version info>
 # Returns empty if nothing found
 # $1: the target specifier string
 get_collection() {
     collection=$(str_after_char "$1" "@")
+
     if [ "$collection" = "$1" ]; then
         # original string returned, meaning no collection specified. Return an empty string
         collection=""
+    else
+        # a collection was returned, but we need to check if version information is appended
+        # and remove it for the collection name
+        collection=$(str_before_char "$collection" "==")
     fi
     echo "$collection"
 }
@@ -207,7 +212,22 @@ get_collection() {
 # Gets the target name from a target specifier, of the form target@<collection name>
 # $1: the target specifier string
 get_target() {
-    str_before_char "$1" "@"
+    target=$(str_before_char "$1" "==")
+    target=$(str_before_char "$target" "@")
+    echo "$target"
+}
+
+# Gets the version information, which follows the convention <target>@<collection>==<version>
+# $1: The target specificer string
+get_version_info() {
+    version_info=$(str_after_char "$1" "==")
+
+    if [ "$version_info" = "$1" ]; then
+        # original string is returned, this means the == delimter wasn't found
+        # return an empty string in this case
+        version_info=""
+    fi
+    echo "$version_info"
 }
 
 # Validates that specified target is good to run against supplied collection
@@ -457,18 +477,21 @@ config_directories() {
 
 # Run a specific type of hook for a given target.
 # The script is sourced to give access to all the caifs runtime variables.
-# $1: collection path
-# $2: target
+# $1: target specificer <target>@<collection>==<version info>
+# $2: collection path
 # $3: hook type [pre|post|rm]
 run_hook() {
-    collection_path="$1"
-    target=$2
+    _func="run_hook:"
+    target=$(get_target "$1")
+    collection=$(get_collection "$1")
+    version_info=$(get_version_info "$1")
+    collection_path=$2
     hook_type=$3
 
     collection_name=$(basename "$collection_path")
 
     if [ "$RUN_HOOKS" -ne 0 ]; then
-        log_debug "Not running ${hook_type}-hook for target '$target' in collection $collection_path"
+        log_debug "$_func Not running ${hook_type}-hook for target '$target' in collection $collection_path"
         return 0
     fi
 
@@ -476,7 +499,7 @@ run_hook() {
         log_info "DRY-RUN: Would have run ${hook_type}-hook for target '$target' in collection $collection_name"
 
     elif [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
-        log_debug "Running ${hook_type}-hook for target '$target' in collection $collection_path"
+        log_debug "$_func Running ${hook_type}-hook for target '$target' in collection $collection_path"
         # Run within a subshell, this has the benefit of any sourced script functions and variables
         # do not pollute subsequent targets on the same run
         export CAIFS_TARGET="$target"
@@ -495,6 +518,11 @@ run_hook() {
             # import the hook script functions
             . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
 
+            # TARGET VERSION is injected into this sub-process to allow targets to
+            # make use of version information provided on the command line
+            # shellcheck disable=SC2034
+            TARGET_VERSION="$version_info"
+
             log_info "Running ${hook_type}-hook for target '$target' in '$collection_name' collection on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
             run_hook_functions
 
@@ -506,7 +534,7 @@ run_hook() {
         unset CAIFS_TARGET
 
     else
-        log_debug "No ${hook_type}-hook found for target '$target'. Ignoring"
+        log_debug "$_func No ${hook_type}-hook found for target '$target'. Ignoring"
     fi
 
 }
@@ -567,18 +595,19 @@ is_target_linked() {
 
 # Creates symbolic links for all files under the target config directory
 # It creates the directory structure, if it doesn't exist already
-# $1: collection path
-# $2: target
+# $1: target name
+# $2: collection path
 # $3: root directory to link the files in
 create_target_links() {
-    collection_path="$1"
-    target=$2
+    _func="create_target_links:"
+    target="$1"
+    collection_path="$2"
     link_root=$3
 
-    log_debug "create_target_links: BEGIN collection_path=$collection_path target=$target link_root=$link_root"
+    log_debug "$_func create_target_links: BEGIN collection_path=$collection_path target=$target link_root=$link_root"
 
     if [ "$RUN_LINKS" -ne 0 ]; then
-        log_debug "Not running links as it is disabled RUN_LINKS=$RUN_LINKS"
+        log_debug "$_func Not running links as it is disabled RUN_LINKS=$RUN_LINKS"
         return 0
     fi
 
@@ -586,23 +615,23 @@ create_target_links() {
     # environments take priority to the standard 'config' one, which comes last in the find
     target_directory="$(config_directories "${collection_path}/${target}")"
 
-    log_debug "using target_directory=$target_directory"
+    log_debug "$_func using target_directory=$target_directory"
 
     for config_dir in $target_directory; do
         for config_file in $(files_in_dir "$config_dir"); do
 
-            log_debug "Processing $config_dir/$config_file"
+            log_debug "$_func Processing $config_dir/$config_file"
 
             # Form the source path of the link, which is a path to the current config file
             src_path="$config_dir/$config_file"
             dest_file=$config_file
             require_escalation=1
 
-            log_debug "Initially src_path=$src_path dest_file=$config_file"
+            log_debug "$_func Initially src_path=$src_path dest_file=$config_file"
             # replace any variable place holders in the relative path, to form a destination path
             dest_file=$(replace_vars_in_string "$config_file")
             rc=$?
-            log_debug "Return code from replace_vars_in_string rc=$rc"
+            log_debug "$_func Return code from replace_vars_in_string rc=$rc"
             if [ "$rc" -ne 0 ]; then
                 log_warn "$config_file has missing variables or incorrect syntax and will be skipped"
                 continue
@@ -612,7 +641,7 @@ create_target_links() {
             # strip the $link_root from the dest_path to avoid double-ups.
             # TODO: This feels like a work-around and should be cleaner
             dest_path="${dest_file#"$link_root"}"
-            log_debug "Stripped $link_root from $dest_file to form $dest_path"
+            log_debug "$_func Stripped $link_root from $dest_file to form $dest_path"
             dest_path="$link_root/$dest_path"
 
             # Check if the leading config entry has a ^ then we need to escalate to root
@@ -788,6 +817,7 @@ version_from_env() {
     PACKAGE_UPPERCASE=$(echo "$PACKAGE" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
     PACKAGE_VERSION_VARNAME="${PACKAGE_UPPERCASE}_VERSION"
     PACKAGE_VERSION=$(eval echo "\$$PACKAGE_VERSION_VARNAME")
+    log_debug "Matching package version for $PACKAGE will be in env-var $PACKAGE_VERSION_VARNAME"
     echo "$PACKAGE_VERSION"
 }
 
@@ -807,6 +837,20 @@ rootdo() {
         # shellcheck disable=SC2068
         $@
     fi
+}
+
+# Installs packages vis homebrew without confirmation
+# $@ packages and any further options
+brew_install() {
+    has_or_exit brew
+    brew install --yes "$@"
+}
+
+# Uninstalls packages vis homebrew without confirmation
+# $@ packages and any further options
+brew_uninstall() {
+    has_or_exit brew
+    brew uninstall --yes "$@"
 }
 
 # Install packages via yay (AUR helper) without confirmation
@@ -851,17 +895,12 @@ apt_uninstall() {
 # added, otherwise it is assumed a user knows what they are doing and have specified a custom path
 # $1 name of the tool to install via uv
 uv_install() {
+    _func="uv_install:"
     has_or_exit uv
     PACKAGE=$1
     shift 1
 
-    log_debug "Attempting to install $PACKAGE"
-
-    PACKAGE_VERSION=$(version_from_env "$PACKAGE")
-    if [ -n "$PACKAGE_VERSION" ]; then
-        log_debug "Found ${PACKAGE}_VERSION=$PACKAGE_VERSION"
-        PACKAGE="$PACKAGE==$PACKAGE_VERSION"
-    fi
+    log_info "Using uv installer for managing $PACKAGE"
 
     # Need to override the install base dir in the case of when a custom link root is specified. If it is the default,
     # then we need to append the .local path. Otherwise, assume it is correct
@@ -882,17 +921,16 @@ uv_uninstall() {
 
 # Install a package via npm.
 # You should ensure that the nodejs hook has been run previously, otherwise packages will be
-# installed to non-shell aware locations
+# installed to non-shell aware locations.
+# NOTE: This function relies on an injected version variable, which is specified at the command line
 # $1 name of the package
 npm_install() {
+    _func="npm_install:"
     has_or_exit npm
     PACKAGE=$1
     shift 1
 
-    PACKAGE_VERSION=$(version_from_env "$PACKAGE")
-    if [ -n "$PACKAGE_VERSION" ]; then
-        PACKAGE="${PACKAGE}@${PACKAGE_VERSION}"
-    fi
+    log_info "Using npm installer for managing $PACKAGE"
 
     local_link_root=$LINK_ROOT
     if [ "$LINK_ROOT" = "$HOME" ]; then
@@ -901,6 +939,7 @@ npm_install() {
     npm config set prefix "$local_link_root"
     # npm has a bug where trailing spaces after the package name get added to the package
     # so we smoosh the trailing args up tight with the package name
+    log_debug "$_func installing the following command \"${PACKAGE}$*\""
     npm install --global "${PACKAGE}$*"
 }
 
