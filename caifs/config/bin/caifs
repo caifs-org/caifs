@@ -60,6 +60,7 @@ Commands:
   status              Show link status of all targets in collections
 
 Add Command options:
+  -c  --collection <name> Constrain the adding of targets to a single collection
   -d, --directory <path>  Collection directory (can be specified multiple times)
   -l, --links             Only create symlinks, skip hooks
   -h, --hooks             Only run hooks, skip symlinks
@@ -76,6 +77,7 @@ Remove Command options:
   -r, --link-root <path>  Set an alternative to $HOME as the link destination
 
 Status Command options:
+  -c  --collection <name> Constrain the status output to a single collection
   -d, --directory <path>  Collection directory (can be specified multiple times)
   -r, --link-root <path>  Set an alternative to $HOME as the link destination
 
@@ -319,6 +321,7 @@ cmd_remove() {
 # $2 targets - an array of 1 or more targets to add
 # $3 link_root
 cmd_add() {
+    _func="cmd_add:"
     log_debug "cmd_add: begin $*"
 
     collection_paths="$1"
@@ -328,7 +331,7 @@ cmd_add() {
     while [ -n "$collection_paths" ]; do
 
         caifs_collection="${collection_paths%%:*}"
-        log_debug "Working with $caifs_collection"
+        log_debug "$_func Working with $caifs_collection"
 
         # Cater for the --collection argument
         if valid_for_collection_path "$(get_collection_constraint)" "$caifs_collection"; then
@@ -336,18 +339,20 @@ cmd_add() {
             for t in $run_targets; do
                 target=$(get_target "$t")
                 collection=$(get_collection "$t")
-                log_debug "target sanitised to $target from $t and collection specified as $collection"
+                version_info=$(get_version_info "$t")
+
+                log_debug "$_func target specificer $t sanitised to target=$target, version=$version_info and collection=$collection"
 
                 if ! valid_for_collection_path "$collection" "$caifs_collection"; then
                     log_debug "collection '$collection' not valid for current caifs collection path '$caifs_collection' - skipping"
                     continue
                 fi
 
-                run_pre_hook "${caifs_collection}" "$target"
+                run_pre_hook "$t" "$caifs_collection"
 
-                create_target_links "${caifs_collection}" "${target}" "${link_root}"
+                create_target_links "$target" "$caifs_collection" "${link_root}"
 
-                run_post_hook "${caifs_collection}" "$target"
+                run_post_hook "$t" "$caifs_collection"
             done
         fi
 
@@ -360,7 +365,7 @@ cmd_add() {
         fi
     done
 
-    log_debug "cmd_add: end"
+    log_debug "$_func end"
 }
 
 # Display status of all targets in collections

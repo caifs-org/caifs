@@ -326,22 +326,44 @@ test_str_splitting() {
     assertSame "No target specified, but the collection is, should return collection" "collection" "$split"
 }
 
-test_target_and_collection() {
+test_target_specification() {
 
     target1="ruff@python-utils"
     target2="ruff"
+    target3="ruff@python-utils==1.2.3"
+    target4="ruff==1.2.3"
 
     t=$(get_target "$target1")
     c=$(get_collection "$target1")
+    v=$(get_version_info "$target1")
 
     assertSame "Target should be ruff" "ruff" "$t"
     assertSame "Collection should be python-utils" "python-utils" "$c"
+    assertSame "version info should be empty" "" "$v"
 
     t=$(get_target "$target2")
     c=$(get_collection "$target2")
+    v=$(get_version_info "$target2")
 
     assertSame "Target should be ruff" "ruff" "$t"
     assertSame "Collection should be empty" "" "$c"
+    assertSame "version info should be empty" "" "$v"
+
+    t=$(get_target "$target3")
+    c=$(get_collection "$target3")
+    v=$(get_version_info "$target3")
+
+    assertSame "Target should be ruff" "ruff" "$t"
+    assertSame "Collection should be python-utils" "python-utils" "$c"
+    assertSame "version info should be empty" "1.2.3" "$v"
+
+    t=$(get_target "$target4")
+    c=$(get_collection "$target4")
+    v=$(get_version_info "$target4")
+
+    assertSame "Target should be ruff" "ruff" "$t"
+    assertSame "Collection should be empty" "" "$c"
+    assertSame "version info should be empty" "1.2.3" "$v"
 }
 
 test_valid_for_collection_path() {
