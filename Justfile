@@ -32,9 +32,14 @@ test-in-docker:
 # Run integration and unit tests
 [script]
 test:
-    cd tests/
-    ./integration.sh
-    ./unit.sh
+    if ls -la /.dockerenv 2>/dev/null ; then
+        cd tests/
+        ./integration.sh
+        ./unit.sh
+    else
+        echo "Does not appear to be within a docker container"
+        exit 1
+    fi
 
 [script]
 [arg("patch", long="patch", value="patch")]

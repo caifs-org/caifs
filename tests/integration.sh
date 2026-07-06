@@ -3,10 +3,8 @@
 
 oneTimeSetUp() {
     #export CAIFS_VERBOSE=0
-    # Add local caifs to the path if it's not available
-    if ! command -v caifs &>/dev/null; then
-        PATH="$(dirname $0)/../src/bin/:$PATH"
-    fi
+    # Add local caifs to the path
+    PATH="$(dirname $0)/../src/bin/:$PATH"
 
     TEST_USER=${TEST_USER:-$TEST_USER}
     TEST_USER_HOME=${TEST_USER_HOME:-$TEST_USER_HOME}
