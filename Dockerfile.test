@@ -24,6 +24,6 @@ COPY ./src  /staging/src
 COPY ./tests /staging/tests
 COPY Justfile .
 
-RUN ls -lh src
+RUN ls -lh src && touch /.dockerenv
 RUN just download-shunit
 RUN just test
