@@ -49,7 +49,7 @@ bump-version $patch="" $minor="" $major="" *args:
     bump-my-version bump $patch $minor $major {{ args }}
 
 create-release-tar:
-    tar -czvf release.tar.gz -X .tarignore src/
+    tar -C src/ -czvf release.tar.gz -X .tarignore .
 
 [doc('List contents of release tarball')]
 [script]
@@ -66,9 +66,11 @@ pre-commit-run:
 
 # Install caifs to ~/.local/ via hard copy
 [script]
-install-caifs:
-    ./src/bin/caifs add caifs -d .
-    caifs add caifs-common -d . --hooks
+install-caifs link-root="$HOME/.local":
+    mkdir -p {{link-root}}/share/caifs-collections
+    cp -r ./src/* {{link-root}}/
+    curl -L https://github.com/caifs-org/caifs-common/releases/latest/download/release.tar.gz \
+    | tar zxvf - -C $HOME/.local/share/caifs-collections
 
 [doc('Install CI runner dependencies (uv, pre-commit, rumdl)')]
 [script]
@@ -87,5 +89,5 @@ replace str from to:
 
 [doc('Use symbolic link to install caifs directly from the git repo. Useful for local development')]
 install-caifs-links:
-    ln -s ~/.local/bin/caifs ~/path/to/caifs/src/bin/caifs
-    ln -s ~/.local/lib/caifslib.sh ~/path/to/caifs/src/lib/caifslib.sh
+    ln -s ~/.local/bin/caifs $PWD/src/bin/caifs
+    ln -s ~/.local/lib/caifs $PWD/src/lib/caifs
