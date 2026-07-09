@@ -1,3 +1,3 @@
 FROM scratch AS caifs
 
-COPY caifs/src/ /caifs/
+COPY src/ /caifs/
