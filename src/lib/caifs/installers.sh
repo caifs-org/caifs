@@ -157,6 +157,10 @@ debian_cert_handler() {
     dry_or_exec rootdo update-ca-certificates
 }
 
+alpine_cert_handler() {
+    debian_cert_handler "$@"
+}
+
 steamos_cert_handler() {
     arch_cert_handler "$@"
 }
