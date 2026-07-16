@@ -89,5 +89,5 @@ replace str from to:
 
 [doc('Use symbolic link to install caifs directly from the git repo. Useful for local development')]
 install-caifs-links:
-    ln -s ~/.local/bin/caifs $PWD/src/bin/caifs
-    ln -s ~/.local/lib/caifs $PWD/src/lib/caifs
+    ln -s $PWD/src/bin/caifs ~/.local/bin/caifs
+    ln -s $PWD/src/lib/caifs ~/.local/lib/caifs
