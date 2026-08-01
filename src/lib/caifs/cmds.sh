@@ -126,8 +126,8 @@ cmd_status() {
     fi
 
     # Print header
-    printf "%-40s %-20s %-8s %s\n" "COLLECTION" "TARGET" "LINKED" "HOOKS"
-    printf "%-40s %-20s %-8s %s\n" "$(printf '%0.s-' $(seq 1 40))" "$(printf '%0.s-' $(seq 1 20))" "------" "-----"
+    printf "%-25s %-30s %-8s %s\n" "COLLECTION" "TARGET" "LINKED" "HOOKS"
+    printf "%-25s %-30s %-8s %s\n" "$(printf '%0.s-' $(seq 1 25))" "$(printf '%0.s-' $(seq 1 30))" "------" "-----"
 
     while [ -n "$collection_paths" ]; do
         caifs_collection="${collection_paths%%:*}"
@@ -167,7 +167,7 @@ cmd_status() {
                         hooks_status="${CROSS}"
                     fi
 
-                    printf "%-40s %-20s %b %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
+                    printf "%-25s %-30s %b %s\n" "$collection_name" "$target" "$linked_status" "$hooks_status"
                 done
             fi
         fi

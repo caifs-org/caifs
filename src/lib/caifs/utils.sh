@@ -627,7 +627,6 @@ caifs_install() {
         ensure_permissions "${CAIFS_INSTALL_DIR}/*"
         dry_or_exec cp -vpr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     fi
-
 }
 
 # shellcheck disable=SC2120

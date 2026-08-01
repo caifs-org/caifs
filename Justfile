@@ -91,3 +91,7 @@ replace str from to:
 install-caifs-links:
     ln -s $PWD/src/bin/caifs ~/.local/bin/caifs
     ln -s $PWD/src/lib/caifs ~/.local/lib/caifs
+
+[doc('Run local CAIFS directly from just, overriding the default path to preference local.')]
+caifs *args:
+    ./src/bin/caifs {{ args }}

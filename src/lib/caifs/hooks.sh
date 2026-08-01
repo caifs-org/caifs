@@ -74,7 +74,6 @@ run_hook() {
         # do not pollute subsequent targets on the same run
         export CAIFS_TARGET="$target"
         (
-
             TMP_DIR=$(mktemp -d)
             cd "${TMP_DIR}" || exit
 
