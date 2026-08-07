@@ -43,6 +43,12 @@ run_hook_functions() {
         log_debug "Container environment detected"
         check_and_exec_function container
     fi
+
+    # Run portable-specific hooks for laptop/notebook only tooling, power management, etc.
+    if is_portable; then
+        log_debug "Portable device detected"
+        check_and_exec_function portable
+    fi
 }
 
 # Run a specific type of hook for a given target.

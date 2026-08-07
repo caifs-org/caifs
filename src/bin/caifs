@@ -1,7 +1,6 @@
 #!/bin/sh
 
 BINDIR=$(dirname "$0")
-# shellcheck source=src/lib/caifs/*
 . "${BINDIR}"/../lib/caifs/utils.sh
 . "${BINDIR}"/../lib/caifs/cmds.sh
 
