@@ -31,7 +31,7 @@ log_error() {
 ## Some globals. These can generally be overridden via environment variables with the CAIFS_ prefix
 # By default, run both links and hooks
 # shellcheck disable=SC2034
-CAIFS_VERSION=0.9.0
+CAIFS_VERSION=1.0.0
 
 HOOKS_DIR=hooks
 
