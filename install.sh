@@ -1,19 +1,28 @@
 #!/bin/sh
 
-INSTALL_PREFIX=${INSTALL_PREFIX:=$HOME/.local/}
-LATEST_VERSION=$(curl -sL https://api.github.com/repos/caifs-org/caifs/releases/latest?per_page=1 \
-                     | tr -d '[:space:]' \
-                     | sed -E 's/.*"tag_name":"v?([^"]+)".*/\1/')
-
-curl -sL https://github.com/caifs-org/caifs/releases/download/v"$LATEST_VERSION"/release.tar.gz | tar zxf -
+INSTALL_PREFIX=${INSTALL_PREFIX:=$HOME/.local}
+INCLUDE_COMMON="0"
+CAIFS_VERSION="latest"
+CAIFS_COMMON_VERSION="latest"
 
 mkdir -p "$INSTALL_PREFIX"
 
-cp -r caifs/config/bin "$INSTALL_PREFIX"
-cp -r caifs/config/lib "$INSTALL_PREFIX"
+if [ "${CAIFS_VERSION}" = "latest" ]; then
+    DOWNLOAD_URL="https://github.com/caifs-org/caifs/releases/${CAIFS_VERSION}/download/release.tar.gz"
+else
+    DOWNLOAD_URL="https://github.com/caifs-org/caifs/releases/download/${CAIFS_VERSION}/release.tar.gz"
+fi
 
-curl -sL https://raw.githubusercontent.com/caifs-org/caifs-common/refs/heads/main/install.sh | sh
+curl -sL "${DOWNLOAD_URL}" | tar zvxf - -C "$INSTALL_PREFIX"
 
-# The old way was to use caifs to install, but it left the caifs-common target around
-# #./caifs/config/bin/caifs add caifs -d . --link-root="$INSTALL_PREFIX"
-rm -rf caifs
+if [ "${INCLUDE_COMMON}" -eq 0 ]; then
+    mkdir -p "$INSTALL_PREFIX"/share/caifs-collections
+
+    if [ "${CAIFS_COMMON_VERSION}" = "latest" ]; then
+        DOWNLOAD_URL="https://github.com/caifs-org/caifs-common/releases/${CAIFS_COMMON_VERSION}/download/release.tar.gz"
+    else
+        DOWNLOAD_URL="https://github.com/caifs-org/caifs-common/releases/download/${CAIFS_COMMON_VERSION}/release.tar.gz"
+    fi
+
+    curl -sL "${DOWNLOAD_URL}" | tar zvxf - -C "${INSTALL_PREFIX}"/share/caifs-collections
+fi

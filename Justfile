@@ -32,9 +32,14 @@ test-in-docker:
 # Run integration and unit tests
 [script]
 test:
-    cd tests/
-    ./integration.sh
-    ./unit.sh
+    if ls -la /.dockerenv 2>/dev/null ; then
+        cd tests/
+        ./integration.sh
+        ./unit.sh
+    else
+        echo "Does not appear to be within a docker container"
+        exit 1
+    fi
 
 [script]
 [arg("patch", long="patch", value="patch")]
@@ -44,7 +49,7 @@ bump-version $patch="" $minor="" $major="" *args:
     bump-my-version bump $patch $minor $major {{ args }}
 
 create-release-tar:
-    tar -czvf release.tar.gz caifs/
+    tar -C src/ -czvf release.tar.gz -X .tarignore .
 
 [doc('List contents of release tarball')]
 [script]
@@ -59,11 +64,13 @@ pre-commit-install:
 pre-commit-run:
     pre-commit run --all
 
-# Install caifs to ~/.local/ (symlinks bin and lib)
+# Install caifs to ~/.local/ via hard copy
 [script]
-install-caifs:
-    ./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local" --force
-    caifs add caifs-common -d . --hooks
+install-caifs link-root="$HOME/.local":
+    mkdir -p {{link-root}}/share/caifs-collections
+    cp -r ./src/* {{link-root}}/
+    curl -L https://github.com/caifs-org/caifs-common/releases/latest/download/release.tar.gz \
+    | tar zxvf - -C $HOME/.local/share/caifs-collections
 
 [doc('Install CI runner dependencies (uv, pre-commit, rumdl)')]
 [script]
@@ -79,3 +86,12 @@ replace-regex str regex replacement:
 [script]
 replace str from to:
     echo {{ replace(str, from, to) }}
+
+[doc('Use symbolic link to install caifs directly from the git repo. Useful for local development')]
+install-caifs-links:
+    ln -s $PWD/src/bin/caifs ~/.local/bin/caifs
+    ln -s $PWD/src/lib/caifs ~/.local/lib/caifs
+
+[doc('Run local CAIFS directly from just, overriding the default path to preference local.')]
+caifs *args:
+    ./src/bin/caifs {{ args }}

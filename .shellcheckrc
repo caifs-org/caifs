@@ -1,4 +1,7 @@
 shell=sh
 
 disable=SC1091
-source-path=caifs/config/lib/caifslib.sh
+# Modules source each other as "${BINDIR}"/../lib/caifs/<mod>.sh. shellcheck cannot
+# evaluate BINDIR (it is $(dirname "$0")) so it expands to empty, leaving ./../lib/caifs/<mod>.sh
+# to resolve against this path. src/bin mirrors where $0 actually lives at runtime.
+source-path=src/bin

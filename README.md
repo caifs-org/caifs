@@ -92,15 +92,36 @@ Install globally by using env var `INSTALL_PREFIX=/usr/local/` and root privileg
 
 Check it's working and on your path with -
 
-`caifs --version` or `caifs --help`
+`caifs --version` or `caifs --help` or `caifs status`
+
+> ![TIP]
+> Running the above periodically will grab the latest version and keep it up to date
 
 OR
 
-Clone the repository and install CAIFS, using CAIFS
+Curl the the latest release directly, which is what the `install.sh` but it might be useful in corporate environments
+that have MITM certificates, so you can disable the verification with `-k/--insecure`
 
 ``` shell
-git clone https://github.com/caifs-org/caifs/caifs.git
-./caifs/config/bin/caifs add caifs -d . --link-root "$HOME/.local"
+curl -kL https://github.com/caifs-org/caifs/releases/latest/download/release.tar.gz | tar zxvf - -C $HOME/.local
+
+# And if you want caifs-common installed, do similar
+curl -kL https://github.com/caifs-org/caifs-common/releases/latest/download/release.tar.gz | tar zxvf - -C $HOME/.local/share/caifs-collections
+
+```
+
+OR
+
+If you are planning on working on caifs locally and want changes to immediately be applied globally, link the files
+in manually
+
+``` shell
+# Using just recipe
+just install-caifs-links
+
+# Or manually ....
+ln -s ~/.local/bin/caifs ~/path/to/caifs/src/bin/caifs
+ln -s ~/.local/lib/caifs ~/path/to/caifs/src/lib/caifs
 ```
 
 ### Enable caifs-common collection (optional but recommended)

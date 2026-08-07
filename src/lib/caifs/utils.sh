@@ -475,274 +475,6 @@ config_directories() {
     echo "$config_directories"
 }
 
-# Run a specific type of hook for a given target.
-# The script is sourced to give access to all the caifs runtime variables.
-# $1: target specificer <target>@<collection>==<version info>
-# $2: collection path
-# $3: hook type [pre|post|rm]
-run_hook() {
-    _func="run_hook:"
-    target=$(get_target "$1")
-    collection=$(get_collection "$1")
-    version_info=$(get_version_info "$1")
-    collection_path=$2
-    hook_type=$3
-
-    collection_name=$(basename "$collection_path")
-
-    if [ "$RUN_HOOKS" -ne 0 ]; then
-        log_debug "$_func Not running ${hook_type}-hook for target '$target' in collection $collection_path"
-        return 0
-    fi
-
-    if [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ] && [ "$DRY_RUN" -eq 0 ]; then
-        log_info "DRY-RUN: Would have run ${hook_type}-hook for target '$target' in collection $collection_name"
-
-    elif [ -f "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh" ]; then
-        log_debug "$_func Running ${hook_type}-hook for target '$target' in collection $collection_path"
-        # Run within a subshell, this has the benefit of any sourced script functions and variables
-        # do not pollute subsequent targets on the same run
-        export CAIFS_TARGET="$target"
-        (
-
-            TMP_DIR=$(mktemp -d)
-            cd "${TMP_DIR}" || exit
-
-            # pre create an install directory that caifs_install can use to automatically install files
-            mkdir -p ${CAIFS_INSTALL_DIR}/bin \
-                  ${CAIFS_INSTALL_DIR}/lib \
-                  ${CAIFS_INSTALL_DIR}/share/zsh/completions \
-                  ${CAIFS_INSTALL_DIR}/share/bash-completion/completions
-
-            # shellcheck disable=SC1090
-            # import the hook script functions
-            . "$collection_path/$target/$HOOKS_DIR/${hook_type}.sh"
-
-            # TARGET VERSION is injected into this sub-process to allow targets to
-            # make use of version information provided on the command line
-            # shellcheck disable=SC2034
-            TARGET_VERSION="$version_info"
-
-            log_info "Running ${hook_type}-hook for target '$target' in '$collection_name' collection on ${OS_TYPE}/${OS_ID}($OS_ARCH)"
-            run_hook_functions
-
-            cd "${TMP_DIR}" || exit
-
-            #cd - || exit
-            rm -rf "${TMP_DIR}"
-        )
-        unset CAIFS_TARGET
-
-    else
-        log_debug "$_func No ${hook_type}-hook found for target '$target'. Ignoring"
-    fi
-
-}
-
-# A wrapper to specifically run a remove hook
-# $1: collection path
-# $2: The target name to run the hook for
-run_remove_hook() {
-    run_hook "$@" "rm"
-}
-
-# A wrapper to specifically run a pre hook
-# $1: collection path
-# $2: The target name to run the hook for
-run_pre_hook() {
-    run_hook "$@" "pre"
-}
-
-# A wrapper to specifically run a post hook
-# $1: collection path
-# $2: The target name to run the hook for
-run_post_hook() {
-    run_hook "$@" "post"
-}
-
-
-# Check if a target has any linked files
-# $1: collection path
-# $2: target name
-# $3: link root
-# Returns 0 if linked, 1 if not
-is_target_linked() {
-    collection_path="$1"
-    target="$2"
-    link_root="$3"
-
-    target_directory="$(config_directories "${collection_path}/${target}")"
-    log_debug "using target_directory=$target_directory"
-
-    for config_dir in $target_directory; do
-        for config_file in $(files_in_dir "$config_dir"); do
-            dest_link="$link_root/$config_file"
-            src_config_file="$config_dir/$config_file"
-            log_debug "Checking if dest_link=$dest_link is linked to $src_config_file"
-
-            if [ -L "$dest_link" ]; then
-                # Verify the symlink points to our target
-                link_target=$(readlink "$dest_link")
-                if [ "$link_target" = "$src_config_file" ]; then
-                    log_debug "$src_config_file is -> $link_target"
-                    return 0
-                fi
-            fi
-        done
-    done
-    return 1
-}
-
-# Creates symbolic links for all files under the target config directory
-# It creates the directory structure, if it doesn't exist already
-# $1: target name
-# $2: collection path
-# $3: root directory to link the files in
-create_target_links() {
-    _func="create_target_links:"
-    target="$1"
-    collection_path="$2"
-    link_root=$3
-
-    log_debug "$_func create_target_links: BEGIN collection_path=$collection_path target=$target link_root=$link_root"
-
-    if [ "$RUN_LINKS" -ne 0 ]; then
-        log_debug "$_func Not running links as it is disabled RUN_LINKS=$RUN_LINKS"
-        return 0
-    fi
-
-    # if in a container or wsl environment, enable extra search directories. These specific
-    # environments take priority to the standard 'config' one, which comes last in the find
-    target_directory="$(config_directories "${collection_path}/${target}")"
-
-    log_debug "$_func using target_directory=$target_directory"
-
-    for config_dir in $target_directory; do
-        for config_file in $(files_in_dir "$config_dir"); do
-
-            log_debug "$_func Processing $config_dir/$config_file"
-
-            # Form the source path of the link, which is a path to the current config file
-            src_path="$config_dir/$config_file"
-            dest_file=$config_file
-            require_escalation=1
-
-            log_debug "$_func Initially src_path=$src_path dest_file=$config_file"
-            # replace any variable place holders in the relative path, to form a destination path
-            dest_file=$(replace_vars_in_string "$config_file")
-            rc=$?
-            log_debug "$_func Return code from replace_vars_in_string rc=$rc"
-            if [ "$rc" -ne 0 ]; then
-                log_warn "$config_file has missing variables or incorrect syntax and will be skipped"
-                continue
-            fi
-
-            # in case the variable was at the beginning of the path and containers a $HOME reference,
-            # strip the $link_root from the dest_path to avoid double-ups.
-            # TODO: This feels like a work-around and should be cleaner
-            dest_path="${dest_file#"$link_root"}"
-            log_debug "$_func Stripped $link_root from $dest_file to form $dest_path"
-            dest_path="$link_root/$dest_path"
-
-            # Check if the leading config entry has a ^ then we need to escalate to root
-            is_root_config "$config_file"
-            rc=$?
-            if [ "$rc" -eq 0 ]; then
-                # remove the caret from the start of the string
-                dest_file=$(strip_leading_char "$dest_file")
-                dest_path="/$dest_file"
-                require_escalation=0
-            fi
-
-            #validate_path "$dest_file"
-            create_link "$src_path" "$dest_path" "$require_escalation" "$RUN_FORCE"
-        done
-    done
-}
-
-# Removes all symbolic links for all files under the target config directory
-# $1: collection path
-# $2: target
-# $3: the link_root to remove from
-remove_target_links() {
-    collection_path="$1"
-    target=$2
-    link_root=$3
-    log_debug "Removing links for target=$target in collection=$collection_path"
-
-    if [ "$RUN_LINKS" -ne 0 ]; then
-        log_debug "Not running remove_target_links as it is disabled RUN_LINKS=$RUN_LINKS"
-        return 0
-    fi
-
-    # if in a container or wsl environment, enable extra search directories. These specific
-    # environments take priority to the standard 'config' one, which comes last in the find
-    target_directory="$(config_directories "${collection_path}/${target}")"
-
-    for config_dir in $target_directory; do
-        for config_file in $(files_in_dir "$config_dir"); do
-            log_debug "Found ${config_dir}/${config_file}. Checking if link exists at $link_root/$config_file"
-            if [ -L "$link_root/$config_file" ]; then
-
-                unlink_cmd="unlink $link_root/${config_file}"
-                if [ "$(is_root_config "$config_file")" ]; then
-                    unlink_cmd="rootdo unlink /${config_file}"
-                fi
-                dry_or_exec "$unlink_cmd"
-            fi
-        done
-    done
-}
-
-# $1: link source
-# $2: link destination
-# $3: require root escalation [default 1: false]
-# $4: force mode [default false|1]
-create_link() {
-    source_file="$1"
-    dest_link="$2"
-    require_escalation=${3:-1}
-    force=${4:-1}
-
-    log_debug "create_link: source_file=$source_file dest_link=$dest_link force=$force"
-
-    # Check for existing file or symlink (including broken symlinks)
-    if { [ -e "$dest_link" ] || [ -L "$dest_link" ]; } && [ "$force" -ne 0 ]; then
-        log_warn "link or file already exists for $dest_link .... skipping"
-        return
-    fi
-    if { [ -e "$dest_link" ] || [ -L "$dest_link" ]; } && [ "$force" -eq 0 ]; then
-        if [ -L "$dest_link" ]; then
-            log_warn "FORCE set, unlinking $dest_link"
-            dry_or_exec "unlink $dest_link"
-        elif [ -f "$dest_link" ]; then
-            log_warn "FORCE set, removing regular file $dest_link"
-            dry_or_exec "rm $dest_link"
-        fi
-    fi
-
-    basedir=$(dirname "$dest_link")
-    if [ ! -d "$basedir" ]; then
-        log_debug "Creating directory structure at $basedir"
-        mkdir_cmd="mkdir -p $basedir"
-        if [ "$require_escalation" -eq 0 ]; then
-            mkdir_cmd="rootdo $mkdir_cmd"
-        fi
-        dry_or_exec "$mkdir_cmd"
-        ensure_permissions "$basedir" "$require_escalation"
-    fi
-
-    link_cmd="ln -s $source_file $dest_link"
-    # if the destination link, starts with a / then we need to escalate to root
-    if [ "$require_escalation" -eq 0 ]; then
-        link_cmd="rootdo $link_cmd"
-    fi
-
-    log_info "Creating Link $source_file -> $dest_link"
-    dry_or_exec "$link_cmd"
-
-    ensure_permissions "$dest_link" "$require_escalation"
-}
 
 # $1 - line to conditionally add
 # $2 - file path to add
@@ -839,114 +571,7 @@ rootdo() {
     fi
 }
 
-# Installs packages vis homebrew without confirmation
-# $@ packages and any further options
-brew_install() {
-    has_or_exit brew
-    brew install --yes "$@"
-}
 
-# Uninstalls packages vis homebrew without confirmation
-# $@ packages and any further options
-brew_uninstall() {
-    has_or_exit brew
-    brew uninstall --yes "$@"
-}
-
-# Install packages via yay (AUR helper) without confirmation
-# Arch being a rolling distro the concept of package versions are not really a thing
-# $@ packages to install
-yay_install() {
-    has_or_exit yay
-    yay -S --needed --noconfirm "$@"
-}
-
-# Uninstall packages via yay without confirmation
-# $@ packages to uninstall
-yay_uninstall() {
-    has_or_exit yay
-    yay -Rns --noconfirm "$@"
-}
-
-# Install packages via apt-get for debian and ubuntu
-# rudimentary checks are in place to determine if and update is required
-# $@ packages and options to install
-apt_install() {
-    has_or_exit apt-get
-
-    if ! ls -l /var/lib/apt/lists/; then
-        rootdo apt-get update
-    fi
-
-    rootdo apt-get install -y "$@"
-}
-
-# uninstall packages via apt-get for debian and ubuntu
-# $@packages and options to uninstall
-apt_uninstall() {
-    has_or_exit apt-get
-    rootdo apt-get uninstall -y "$@"
-}
-
-# This helper function can be used for installing tools via uv
-# If a corresponding env var of the form $<PACKAGE NAME>_VERSION exists, then this is assumed to be
-# a version number required for the package. It will be appended to the uv install command via the == syntax
-# It also respects the LINK_ROOT option, if the LINK_ROOT is the default of $HOME, then the standard `.local` prefix is
-# added, otherwise it is assumed a user knows what they are doing and have specified a custom path
-# $1 name of the tool to install via uv
-uv_install() {
-    _func="uv_install:"
-    has_or_exit uv
-    PACKAGE=$1
-    shift 1
-
-    log_info "Using uv installer for managing $PACKAGE"
-
-    # Need to override the install base dir in the case of when a custom link root is specified. If it is the default,
-    # then we need to append the .local path. Otherwise, assume it is correct
-    local_link_root=$LINK_ROOT
-    if [ "$LINK_ROOT" = "$HOME" ]; then
-        local_link_root="$LINK_ROOT/.local"
-    fi
-
-    UV_TOOL_DIR="${local_link_root}/share/uv/tools" \
-    UV_TOOL_BIN_DIR="${local_link_root}/bin" \
-      uv tool install --upgrade "$PACKAGE" "$@"
-}
-
-# Removes a package via a uv tool install
-uv_uninstall() {
-    uv tool uninstall "$@"
-}
-
-# Install a package via npm.
-# You should ensure that the nodejs hook has been run previously, otherwise packages will be
-# installed to non-shell aware locations.
-# NOTE: This function relies on an injected version variable, which is specified at the command line
-# $1 name of the package
-npm_install() {
-    _func="npm_install:"
-    has_or_exit npm
-    PACKAGE=$1
-    shift 1
-
-    log_info "Using npm installer for managing $PACKAGE"
-
-    local_link_root=$LINK_ROOT
-    if [ "$LINK_ROOT" = "$HOME" ]; then
-        local_link_root="$LINK_ROOT/.local"
-    fi
-    npm config set prefix "$local_link_root"
-    # npm has a bug where trailing spaces after the package name get added to the package
-    # so we smoosh the trailing args up tight with the package name
-    log_debug "$_func installing the following command \"${PACKAGE}$*\""
-    npm install --global "${PACKAGE}$*"
-}
-
-# Removes a managed package via npm
-npm_uninstall() {
-    npm uninstall --global "$@"
-}
 
 # Gets the latest github tag from a given repo. By default this api appears to be pretty-printed, so use tr
 # to minify to one line for sed to parse
@@ -963,62 +588,7 @@ gitlab_latest_tag() {
     curl -sL https://gitlab.com/api/v4/projects/"${1}"/releases?per_page=1 | tr -d '[:space:]' | sed -E 's/.*"tag_name":"v?([^"]+)".*/\1/'
 }
 
-# Installs previously linked certificiates from $LOCAL_CERT_DIR into the specific trust chain of the current OS
-install_certs() {
-    cert_dir="$(get_link_root)/${LOCAL_CERT_DIR}"
-    for cert in "$cert_dir"/*; do
-        [ -e "$cert" ] || continue
-        cert_name=$(basename "$cert")
-        log_info "Importing CA '$cert_name' for ${OS_TYPE}/${OS_ID}"
-        case "$OS_TYPE" in
-            Linux)
-                check_and_exec_function "${OS_ID}_cert_handler" "$cert_name" "$cert_dir"
-                ;;
-            Darwin)
-                check_and_exec_function "macos_cert_handler" "$cert_name" "$cert_dir"
-                ;;
-            *)
-                log_error "Not a support OS - ${OS_TYPE}"
-                # This is invoked directly, we can safely ignore it, as it does actually work
-                # shellcheck disable=SC2317
-                exit 1
-                ;;
-        esac
-    done
-}
 
-# $1: cert name
-# $2: location directory of cert $1
-arch_cert_handler() {
-    dry_or_exec rootdo cp "$2/$1" "/etc/ca-certificates/trust-source/anchors/${1}.pem"
-    dry_or_exec rootdo update-ca-trust
-}
-
-# $1: cert name
-# $2: location directory of cert $1
-rhel_cert_handler() {
-    dry_or_exec rootdo cp "$2/$1" "/etc/pki/ca-trust/source/anchors/${1}.pem"
-    dry_or_exec rootdo update-ca-trust
-}
-
-# $1: cert name
-# $2: location directory of cert $1
-debian_cert_handler() {
-    dry_or_exec rootdo cp "$2/$1" "/usr/local/share/ca-certificates/${1}.crt"
-    dry_or_exec rootdo update-ca-certificates
-}
-
-steamos_cert_handler() {
-    arch_cert_handler "$@"
-}
-
-ubuntu_cert_handler() {
-    debian_cert_handler "$@"
-}
-
-fedora_cert_handler() {
-    rhel_cert_handler "$@"
-}
 
 # Changes the permissions of a file or link according to the $RUN_USER variable, if set
 # $1: The file or directory
@@ -1057,7 +627,6 @@ caifs_install() {
         ensure_permissions "${CAIFS_INSTALL_DIR}/*"
         dry_or_exec cp -vpr "${CAIFS_INSTALL_DIR}/*" "$LINK_ROOT/"
     fi
-
 }
 
 # shellcheck disable=SC2120
@@ -1081,45 +650,44 @@ caifs_remove() {
     done
 }
 
-# Generic install script for installing per OS_ID based on the above global
-# variables that determine cross platform OS infomation
-#
-# *_install functions are considered hooks, and should be developed per pre.sh or post.sh script as
-# required
-run_hook_functions() {
+# Expand '*' to all targets in the collections
+# Uses get_collection_paths() and sets run_targets via set_run_targets()
+# $1: An optional explicit collection that was applied to '*@explicit-collection'
+expand_wildcard_targets() {
+    expanded_targets=""
+    collection_paths="$(get_collection_paths)"
 
-    case "$OS_TYPE" in
-        Linux)
-            if has_function "${OS_ID}"; then
-                # Run the specific OS installers before the general purpose linux one
-                check_and_exec_function "${OS_ID}"
-            elif has_function linux; then
-                check_and_exec_function linux
-            fi
-            ;;
-        Darwin)
-            check_and_exec_function macos
-            ;;
-        *)
-            log_error "Not a supported OS"
-            # This is invoked directly, we can safely ignore it, as it does actually work
-            # shellcheck disable=SC2317
-            exit 1
-            ;;
-    esac
+    while [ -n "$collection_paths" ]; do
+        caifs_collection="${collection_paths%%:*}"
 
-    # only run the generic hook, if no OS_TYPE specific hooks exist, which imply they haven't been run
-    if [ "$OS_TYPE" = "Linux" ] && ! (has_function "${OS_ID}" || has_function linux); then
-        log_debug "No '${OS_ID}' or 'linux' hook function exists for OS_TYPE of $OS_TYPE, checking for 'generic'"
-        check_and_exec_function generic
-    elif [ "$OS_TYPE" = "Darwin" ] && ! (has_function "macos"); then
-        log_debug "No '${OS_ID}' or 'linux' hook function exists for OS_TYPE of $OS_TYPE, checking for 'generic'"
-        check_and_exec_function generic
-    fi
+        if [ -d "$caifs_collection" ]; then
+            for target_dir in "$caifs_collection"/*/; do
+                [ -d "$target_dir" ] || continue
+                target=$(basename "$target_dir")
 
-    # Run container-specific hooks for cleanup, etc.
-    if is_container; then
-        log_debug "Container environment detected"
-        check_and_exec_function container
-    fi
+                # Only include if it has a valid caifs structure
+                is_valid_caifs_structure "$target_dir" || continue
+
+                # If we have a explict collection, add it on to the target explicitly
+                if [ -n "$1"  ]; then
+                    target="${target}@${1}"
+                fi
+
+                # Add to list if not already present
+                case " $expanded_targets " in
+                    *" $target "*) ;;  # Already in list
+                    *) expanded_targets="$expanded_targets $target" ;;
+                esac
+            done
+        fi
+
+        # Loop control
+        if [ "$caifs_collection" = "$collection_paths" ]; then
+            collection_paths=""
+        else
+            collection_paths="${collection_paths#*"${caifs_collection}":}"
+        fi
+    done
+
+    set_run_targets "${expanded_targets# }"  # Trim leading space
 }
