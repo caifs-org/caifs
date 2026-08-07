@@ -69,8 +69,38 @@ pre-commit-run:
 install-caifs link-root="$HOME/.local":
     mkdir -p {{link-root}}/share/caifs-collections
     cp -r ./src/* {{link-root}}/
-    curl -L https://github.com/caifs-org/caifs-common/releases/latest/download/release.tar.gz \
-    | tar zxvf - -C $HOME/.local/share/caifs-collections
+
+    COLLECTIONS_DIR="$HOME/.local/share/caifs-collections"
+    TARBALL=$(mktemp)
+    trap 'rm -f "$TARBALL"' EXIT
+
+    curl -L https://github.com/caifs-org/caifs-common/releases/latest/download/release.tar.gz -o "$TARBALL"
+
+    # tar follows a symlinked directory when the archive holds a directory of the same
+    # name, writing straight through it into whatever it points at. Collections are
+    # commonly symlinked to live git checkouts, so refuse rather than clobber them.
+    UNSAFE=""
+    for entry in $(tar ztf "$TARBALL" | sed 's|/.*||' | sort -u); do
+        if [ -L "$COLLECTIONS_DIR/$entry" ]; then
+            UNSAFE="$UNSAFE $entry"
+        fi
+    done
+
+    if [ -n "$UNSAFE" ]; then
+        echo "" >&2
+        echo "WARNING: skipping the caifs-common collection install." >&2
+        echo "WARNING: these entries under $COLLECTIONS_DIR are symlinks, and extracting" >&2
+        echo "WARNING: would write through them and overwrite what they point at:" >&2
+        for entry in $UNSAFE; do
+            echo "WARNING:   $entry -> $(readlink "$COLLECTIONS_DIR/$entry")" >&2
+        done
+        echo "WARNING: remove or rename them first if you want the released collection." >&2
+        echo "WARNING: caifs itself installed fine to {{link-root}}." >&2
+        echo "" >&2
+        exit 0
+    fi
+
+    tar zxvf "$TARBALL" -C "$COLLECTIONS_DIR"
 
 [doc('Install CI runner dependencies (uv, pre-commit, rumdl)')]
 [script]
