@@ -33,6 +33,8 @@ log_error() {
 # shellcheck disable=SC2034
 CAIFS_VERSION=1.0.0
 
+# Consumed by hooks.sh; shellcheck cannot see cross-module use
+# shellcheck disable=SC2034
 HOOKS_DIR=hooks
 
 LOCAL_COLLECTION_DIR=${CAIFS_LOCAL_COLLECTIONS:-"$HOME/.local/share/caifs-collections"}
@@ -101,10 +103,14 @@ get_collection_paths() {
 }
 
 set_run_hooks() {
+    # Consumed by hooks.sh; shellcheck cannot see cross-module use
+    # shellcheck disable=SC2034
     RUN_HOOKS=${1}
 }
 
 set_run_links() {
+    # Consumed by links.sh; shellcheck cannot see cross-module use
+    # shellcheck disable=SC2034
     RUN_LINKS=${1}
 }
 
@@ -121,6 +127,8 @@ get_link_root() {
 }
 
 set_force() {
+    # Consumed by links.sh; shellcheck cannot see cross-module use
+    # shellcheck disable=SC2034
     RUN_FORCE=${1}
 }
 
