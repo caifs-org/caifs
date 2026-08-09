@@ -49,6 +49,12 @@ linux() {
 }
 EOF
 
+    cat << EOF > $COLLECTION_BASE_DIR/dummy_0/git/hooks/rm.sh
+generic() {
+  touch ${COLLECTION_BASE_DIR}/rm-generic.txt
+}
+
+EOF
 
     #tree -a $COLLECTION_BASE_DIR
 }
@@ -264,6 +270,17 @@ test_ownership_from_root() {
     assertTrue "File should be writable by owner" "[ -w $TEST_USER_HOME/.gitconfig ]"
 
     ls -lah $TEST_USER_HOME
+
+}
+
+# Test the remove hook actually runs
+test_hooks_remove() {
+
+    assertTrue "Marker file should not exist dummy_0 root" "[ ! -f ${COLLECTION_BASE_DIR}/rm-generic.txt ]"
+
+    CAIFS_LOCAL_COLLECTIONS=$COLLECTION_BASE_DIR caifs rm git@dummy0 --hooks
+
+    assertTrue "Marker file should exist after running remove hook" "[ -f ${COLLECTION_BASE_DIR}/rm-generic.txt ]"
 
 }
 

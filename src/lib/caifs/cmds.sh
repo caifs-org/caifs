@@ -27,7 +27,7 @@ cmd_remove() {
                 log_debug "$target"
 
                 remove_target_links "${caifs_collection}" "${target}" "${link_root}"
-                run_remove_hook "${caifs_collection}" "$target"
+                run_remove_hook "$target" "${caifs_collection}"
 
             done
         fi
