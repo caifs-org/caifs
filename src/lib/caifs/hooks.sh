@@ -66,6 +66,8 @@ run_hook() {
 
     collection_name=$(basename "$collection_path")
 
+    log_debug "$_func attempting to run hook=$hook_type for $target in $collection_path"
+
     if [ "$RUN_HOOKS" -ne 0 ]; then
         log_debug "$_func Not running ${hook_type}-hook for target '$target' in collection $collection_path"
         return 0
